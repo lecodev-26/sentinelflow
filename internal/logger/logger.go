@@ -48,6 +48,10 @@ func Init(cfg *struct {
 // Get retorna el logger instanciado
 func Get() *logrus.Logger {
 	if log == nil {
+<<<<<<< HEAD
+=======
+		// Logger por defecto
+>>>>>>> b011fca1f048d402212fded110a6fddb45a10859
 		log = logrus.New()
 		log.SetFormatter(&logrus.TextFormatter{
 			FullTimestamp: true,
@@ -96,4 +100,8 @@ func Errorf(format string, args ...interface{}) {
 
 func Fatalf(format string, args ...interface{}) {
 	Get().Fatalf(format, args...)
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> b011fca1f048d402212fded110a6fddb45a10859

@@ -24,15 +24,22 @@ go.work.sum
 .DS_Store
 Thumbs.db
 
+<<<<<<< HEAD
 # Configuración local (con keys)
 configs/local.yaml
 .env
 .env.local
+=======
+# Configuración local
+configs/local.yaml
+.env
+>>>>>>> b011fca1f048d402212fded110a6fddb45a10859
 
 # Logs
 logs/
 *.log
 
+<<<<<<< HEAD
 # Dashboard (si usas npm)
 web/dashboard/node_modules/
 web/dashboard/build/
@@ -41,3 +48,9 @@ web/dashboard/.env.local
 # Ejecutables
 proxy.exe
 sentinel-proxy
+=======
+# Dashboard
+web/dashboard/node_modules/
+web/dashboard/build/
+web/dashboard/.env.local
+>>>>>>> b011fca1f048d402212fded110a6fddb45a10859

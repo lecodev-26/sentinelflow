@@ -8,10 +8,16 @@ import (
 	"net/http"
 	"time"
 
+<<<<<<< HEAD
 	"github.com/lecodev-26/sentinelflow/internal/cache"
 	"github.com/lecodev-26/sentinelflow/internal/config"
 	"github.com/lecodev-26/sentinelflow/internal/logger"
 	"github.com/lecodev-26/sentinelflow/internal/metrics"
+=======
+	"github.com/leco-dev26/sentinelflow/internal/cache"
+	"github.com/leco-dev26/sentinelflow/internal/config"
+	"github.com/leco-dev26/sentinelflow/internal/logger"
+>>>>>>> b011fca1f048d402212fded110a6fddb45a10859
 )
 
 // Engine es el motor de reglas que maneja el enrutamiento y failover
@@ -32,6 +38,7 @@ func NewEngine(cfg *config.Config) *Engine {
 	}
 }
 
+<<<<<<< HEAD
 // ModelRouter asigna modelos a proveedores específicos (Smart Routing)
 type ModelRouter struct {
 	modelMap map[string]string // modelo -> proveedor
@@ -65,10 +72,16 @@ func (mr *ModelRouter) GetProvider(model string) string {
 // Route procesa una petición y la enruta al proveedor adecuado
 func (e *Engine) Route(path, method string, body []byte, headers http.Header) ([]byte, int, error) {
 	logger.Infof("📨 %s %s", method, path)
+=======
+// Route procesa una petición y la enruta al proveedor adecuado
+func (e *Engine) Route(path, method string, body []byte, headers http.Header) ([]byte, int, error) {
+	logger.Infof("📨 Ruta: %s %s", method, path)
+>>>>>>> b011fca1f048d402212fded110a6fddb45a10859
 
 	// Buscar regla para esta ruta
 	rule := e.config.GetRuleByPath(path, method)
 	if rule == nil {
+<<<<<<< HEAD
 		logger.Warnf("⚠️ No hay regla para %s %s", method, path)
 		return nil, http.StatusNotFound, fmt.Errorf("no rule for %s %s", method, path)
 	}
@@ -113,10 +126,23 @@ func (e *Engine) Route(path, method string, body []byte, headers http.Header) ([
 		}
 		providers = reordered
 		logger.Infof("🔄 Orden de proveedores: %v", providers)
+=======
+		return nil, http.StatusNotFound, fmt.Errorf("no rule found for %s %s", method, path)
+	}
+
+	// Verificar caché
+	if e.config.Cache.Enabled && rule.Cache {
+		cacheKey := fmt.Sprintf("%s:%s:%s", method, path, string(body))
+		if cached, found := e.cache.Get(cacheKey); found {
+			logger.Infof("✅ Respuesta desde caché: %s", cacheKey)
+			return cached.([]byte), http.StatusOK, nil
+		}
+>>>>>>> b011fca1f048d402212fded110a6fddb45a10859
 	}
 
 	// Intentar con cada proveedor en orden
 	var lastErr error
+<<<<<<< HEAD
 	for _, providerName := range providers {
 		provider := e.config.GetProviderByName(providerName)
 		if provider == nil {
@@ -125,6 +151,16 @@ func (e *Engine) Route(path, method string, body []byte, headers http.Header) ([
 		}
 
 		logger.Infof("🔄 Intentando: %s", provider.Name)
+=======
+	for _, providerName := range rule.Providers {
+		provider := e.config.GetProviderByName(providerName)
+		if provider == nil {
+			logger.Warnf("⚠️  Proveedor %s no encontrado", providerName)
+			continue
+		}
+
+		logger.Infof("🔄 Intentando con proveedor: %s", provider.Name)
+>>>>>>> b011fca1f048d402212fded110a6fddb45a10859
 
 		resp, status, err := e.forwardRequest(provider, path, method, body, headers)
 		if err == nil && status < 500 {
@@ -138,6 +174,7 @@ func (e *Engine) Route(path, method string, body []byte, headers http.Header) ([
 		}
 
 		lastErr = err
+<<<<<<< HEAD
 		logger.Warnf("❌ Falló %s: %v", provider.Name, err)
 		metrics.RecordProviderFailure(provider.Name)
 
@@ -145,6 +182,14 @@ func (e *Engine) Route(path, method string, body []byte, headers http.Header) ([
 		if provider.Fallback != "" {
 			logger.Infof("↩️ Fallback a: %s", provider.Fallback)
 			metrics.RecordFallback(provider.Name, provider.Fallback)
+=======
+		logger.Warnf("❌ Falló proveedor %s: %v", provider.Name, err)
+
+		// Si tiene fallback, continuar
+		if provider.Fallback != "" {
+			logger.Infof("↩️  Fallback a: %s", provider.Fallback)
+			continue
+>>>>>>> b011fca1f048d402212fded110a6fddb45a10859
 		}
 	}
 
@@ -200,9 +245,18 @@ func (e *Engine) forwardRequest(provider *config.Provider, path, method string, 
 // GetCacheStats retorna estadísticas de la caché
 func (e *Engine) GetCacheStats() map[string]interface{} {
 	return map[string]interface{}{
+<<<<<<< HEAD
 		"size":     e.cache.Size(),
 		"enabled":  e.config.Cache.Enabled,
 		"ttl":      e.config.Cache.TTL.String(),
 		"max_size": e.config.Cache.MaxSize,
 	}
 }
+=======
+		"size":      e.cache.Size(),
+		"enabled":   e.config.Cache.Enabled,
+		"ttl":       e.config.Cache.TTL.String(),
+		"max_size":  e.config.Cache.MaxSize,
+	}
+}
+>>>>>>> b011fca1f048d402212fded110a6fddb45a10859

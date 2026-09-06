@@ -4,11 +4,18 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+<<<<<<< HEAD
 	"time"
 
 	"github.com/lecodev-26/sentinelflow/internal/config"
 	"github.com/lecodev-26/sentinelflow/internal/logger"
 	"github.com/lecodev-26/sentinelflow/internal/rules"
+=======
+
+	"github.com/leco-dev26/sentinelflow/internal/config"
+	"github.com/leco-dev26/sentinelflow/internal/logger"
+	"github.com/leco-dev26/sentinelflow/internal/rules"
+>>>>>>> b011fca1f048d402212fded110a6fddb45a10859
 )
 
 // Proxy es el núcleo del sistema
@@ -19,11 +26,19 @@ type Proxy struct {
 
 // NewProxy crea una nueva instancia del proxy
 func NewProxy(configFile string) (*Proxy, error) {
+<<<<<<< HEAD
+=======
+	// Cargar configuración
+>>>>>>> b011fca1f048d402212fded110a6fddb45a10859
 	cfg, err := config.LoadConfig(configFile)
 	if err != nil {
 		return nil, err
 	}
 
+<<<<<<< HEAD
+=======
+	// Inicializar logger
+>>>>>>> b011fca1f048d402212fded110a6fddb45a10859
 	logger.Init(&struct {
 		Level  string
 		Format string
@@ -34,10 +49,18 @@ func NewProxy(configFile string) (*Proxy, error) {
 		Output: cfg.Logging.Output,
 	})
 
+<<<<<<< HEAD
 	logger.Info("🛡️ SentinelFlow iniciado correctamente")
 	logger.Infof("📋 Proveedores cargados: %d", len(cfg.Providers))
 	logger.Infof("📋 Reglas cargadas: %d", len(cfg.Rules))
 
+=======
+	logger.Info("🛡️  SentinelFlow iniciado correctamente")
+	logger.Infof("📋 Proveedores cargados: %d", len(cfg.Providers))
+	logger.Infof("📋 Reglas cargadas: %d", len(cfg.Rules))
+
+	// Crear motor de reglas
+>>>>>>> b011fca1f048d402212fded110a6fddb45a10859
 	engine := rules.NewEngine(cfg)
 
 	return &Proxy{
@@ -49,6 +72,10 @@ func NewProxy(configFile string) (*Proxy, error) {
 // Handler devuelve el http.Handler principal
 func (p *Proxy) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+<<<<<<< HEAD
+=======
+		// Leer body
+>>>>>>> b011fca1f048d402212fded110a6fddb45a10859
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, "Error reading body", http.StatusBadRequest)
@@ -56,13 +83,23 @@ func (p *Proxy) Handler() http.Handler {
 		}
 		defer r.Body.Close()
 
+<<<<<<< HEAD
 		resp, status, err := p.engine.Route(r.URL.Path, r.Method, body, r.Header)
+=======
+		// Procesar ruta con el motor
+		resp, status, err := p.engine.Route(r.URL.Path, r.Method, body, r.Header)
+
+>>>>>>> b011fca1f048d402212fded110a6fddb45a10859
 		if err != nil {
 			logger.Errorf("❌ Error procesando: %v", err)
 			http.Error(w, err.Error(), status)
 			return
 		}
 
+<<<<<<< HEAD
+=======
+		// Escribir respuesta
+>>>>>>> b011fca1f048d402212fded110a6fddb45a10859
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
 		w.Write(resp)
@@ -76,7 +113,11 @@ func (p *Proxy) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"status":  "ok",
 		"service": "sentinel-flow",
+<<<<<<< HEAD
 		"version": "0.2.0",
+=======
+		"version": "0.1.0",
+>>>>>>> b011fca1f048d402212fded110a6fddb45a10859
 		"config": map[string]interface{}{
 			"providers": len(p.config.Providers),
 			"rules":     len(p.config.Rules),
@@ -84,6 +125,7 @@ func (p *Proxy) HealthCheck(w http.ResponseWriter, r *http.Request) {
 		"cache": p.engine.GetCacheStats(),
 	})
 }
+<<<<<<< HEAD
 
 // GetProvidersStatus devuelve el estado de los proveedores
 func (p *Proxy) GetProvidersStatus(w http.ResponseWriter, r *http.Request) {
@@ -130,3 +172,5 @@ func (p *Proxy) StreamLogs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
+=======
+>>>>>>> b011fca1f048d402212fded110a6fddb45a10859

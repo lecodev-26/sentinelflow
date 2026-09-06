@@ -91,4 +91,8 @@ func (c *Cache) CleanExpired() {
 			delete(c.items, key)
 		}
 	}
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> b011fca1f048d402212fded110a6fddb45a10859
