@@ -55,10 +55,12 @@ go run cmd/proxy/main.go
 ## 🌐 Accede a:
 Servicio	URL
 
+```text
 Proxy	http://localhost:8080
 Dashboard	http://localhost:8080/dashboard
 Métricas	http://localhost:9090/metrics
 Health Check	http://localhost:8080/health
+```
 
 ## 🔧 Configuración
 Edita configs/rules.yaml:
@@ -111,6 +113,7 @@ export ANTHROPIC_API_KEY="ant-tu-key-aqui"
 - YAML	Configuración
 
 ## 📋 Roadmap
+```text
 Estado	Funcionalidad
 ✅	Proxy con failover automático
 ✅	Dashboard en tiempo real
@@ -122,6 +125,7 @@ Estado	Funcionalidad
 🔜	Semantic Cache (embeddings)
 🔜	Autenticación JWT
 🔜	Health Checks activos
+```
 
 ## 🤝 Contribuciones
 ¡Las contribuciones son bienvenidas!
