@@ -133,17 +133,9 @@ MIT License - ver LICENSE para más detalles.
 ## ⭐ ¡Dános una estrella!
 Si este proyecto te ha sido útil, ¡dale una estrella en GitHub!
 =======
-```
 
-🏗️ Arquitectura
 
-```
-[Agente IA] → [SentinelFlow] → [Proveedores (OpenAI, Anthropic, ...)]
-                    ↓
-              [Dashboard Web]
-```
-
-📊 Roadmap
+## 📊 Roadmap
 
 ☐ Carga de configuración
 ☐ Proxy reverso con failover
@@ -151,4 +143,4 @@ Si este proyecto te ha sido útil, ¡dale una estrella en GitHub!
 ☐ Métricas y dashboard
 ☐ Tests y documentación
 ☐ Dockerización
->>>>>>> b011fca1f048d402212fded110a6fddb45a10859
+
