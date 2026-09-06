@@ -4,6 +4,8 @@
 
 **Firewall de Resiliencia para Agentes IA**
 
+[![GitHub last commit](https://img.shields.io/github/last-commit/lecodev-26/sentinelflow?style=flat-square)](https://github.com/lecodev-26/sentinelflow)
+[![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/lecodev-26/sentinelflow?style=flat-square)](https://github.com/lecodev-26/sentinelflow)
 [![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=for-the-badge&logo=go)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge)](http://makeapullrequest.com)
@@ -145,8 +147,4 @@ MIT License - ver LICENSE para más detalles.
 
 <div align="center">
 ⭐ ¡Si te ha sido útil, dale una estrella! ⭐
-
-https://img.shields.io/badge/Twitter-1DA1F2?style=for-the-badge&logo=twitter&logoColor=white
-https://img.shields.io/badge/LinkedIn-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white
-
 </div> 
