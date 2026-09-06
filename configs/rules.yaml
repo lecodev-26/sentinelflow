@@ -1,0 +1,52 @@
+# Configuración de SentinelFlow
+providers:
+  - name: openai
+    url: "https://api.openai.com/v1"
+    timeout: 30s
+    fallback: anthropic
+    headers:
+      Authorization: "Bearer ${OPENAI_API_KEY}"
+      
+  - name: anthropic
+    url: "https://api.anthropic.com/v1"
+    timeout: 30s
+    fallback: local-llama
+    headers:
+      x-api-key: "${ANTHROPIC_API_KEY}"
+      
+  - name: local-llama
+    url: "http://localhost:11434/api"
+    timeout: 60s
+    fallback: ""
+    headers: {}
+
+cache:
+  enabled: true
+  ttl: 300s
+  max_size: 1000
+
+rules:
+  - path: "/v1/chat/completions"
+    method: "POST"
+    cache: true
+    providers: ["openai", "anthropic", "local-llama"]
+    
+  - path: "/v1/completions"
+    method: "POST"
+    cache: true
+    providers: ["openai", "anthropic"]
+    
+  - path: "/v1/embeddings"
+    method: "POST"
+    cache: true
+    providers: ["openai"]
+
+metrics:
+  enabled: true
+  port: 9090
+  path: "/metrics"
+
+logging:
+  level: "info"
+  format: "json"  # json o text
+  output: "stdout"  # stdout o file
