@@ -89,7 +89,7 @@ export OPENAI_API_KEY="sk-tu-key-aqui"
 export ANTHROPIC_API_KEY="ant-tu-key-aqui"
 ```
 ## 🏗️ Arquitectura
-text
+```text
 ┌─────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │   Agente IA │────▶│   SentinelFlow  │────▶│  OpenAI API     │
 │   (Cliente) │     │   (Proxy)       │     │  Anthropic API  │
@@ -100,6 +100,7 @@ text
                     │   Dashboard     │
                     │   Prometheus    │
                     └─────────────────┘
+```
 ## 🛠️ Tecnologías
 - Tecnología	Uso
 - Go 1.21	Lenguaje principal
