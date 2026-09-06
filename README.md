@@ -51,12 +51,17 @@ Métricas Prometheus disponibles en: http://localhost:9090/metrics
 ## 🔧 Configuración
 Edita configs/rules.yaml para personalizar:
 =======
+```bash
 make deps
+```
 
 # Ejecutar el proxy
+```bash
 make run
+```
 
 # Probar que funciona
+```bash
 curl http://localhost:8080/health
 ```
 
