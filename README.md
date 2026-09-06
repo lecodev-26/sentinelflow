@@ -1,32 +1,42 @@
-# 🛡️ SentinelFlow - Firewall de Resiliencia para Agentes IA
-[![GitHub last commit](https://img.shields.io/github/last-commit/lecodev-26/sentinelflow?style=flat-square)](https://github.com/lecodev-26/sentinelflow)
-[![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/lecodev-26/sentinelflow?style=flat-square)](https://github.com/lecodev-26/sentinelflow)
+<div align="center">
 
-[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://go.dev/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
+# 🛡️ SentinelFlow
 
-<<<<<<< HEAD
-**SentinelFlow** es un proxy inteligente que protege tus agentes IA contra fallos de infraestructura.
+**Firewall de Resiliencia para Agentes IA**
+
+[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=for-the-badge&logo=go)](https://go.dev/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge)](http://makeapullrequest.com)
+[![Stars](https://img.shields.io/github/stars/lecodev-26/sentinelflow?style=for-the-badge&color=gold)](https://github.com/lecodev-26/sentinelflow/stargazers)
+
+</div>
+
+---
+
+## 📖 ¿Qué es SentinelFlow?
+
+**SentinelFlow** es un proxy inteligente que protege tus agentes IA contra fallos de infraestructura. Actúa como un **escudo** entre tu aplicación y los proveedores de IA, garantizando disponibilidad y reduciendo costes.
+
+### 🎯 ¿Por qué lo necesitas?
+
+- 🔴 **OpenAI falló** → SentinelFlow cambia automáticamente a Anthropic
+- 🔴 **Anthropic está lento** → SentinelFlow usa Local Llama
+- 🔴 **Muchas peticiones** → SentinelFlow cachea respuestas y ahorra dinero
+
+---
 
 ## ✨ Características
 
-- ✅ **Failover automático** entre proveedores (OpenAI → Anthropic → Local)
-- ✅ **Caché inteligente** para reducir costes y latencia
-- ✅ **Rate Limiting** (100 req/min por IP)
-- ✅ **Smart Routing** (elige el mejor proveedor según el modelo)
-- ✅ **Dashboard en tiempo real** con gráficos y logs
-- ✅ **Métricas Prometheus** para monitoreo
-- ✅ **Logs estructurados** (JSON o texto)
-- ✅ **Configuración YAML** fácil de modificar
-=======
-**SentinelFlow** es un proxy inteligente que protege tus agentes IA contra fallos de infraestructura, proporcionando:
+| Característica | Descripción |
+|----------------|-------------|
+| ⚡ **Failover Automático** | Si un proveedor falla, cambia al siguiente sin intervención |
+| 🎯 **Smart Routing** | Cada modelo se enruta al mejor proveedor (GPT → OpenAI, Claude → Anthropic) |
+| 🚦 **Rate Limiting** | Protege contra abusos: 100 peticiones/min por IP |
+| 💾 **Caché Inteligente** | Respuestas guardadas en caché para reducir costes y latencia |
+| 📊 **Dashboard Real-time** | Monitoriza todo desde un panel visual con gráficos |
+| 📈 **Métricas Prometheus** | Exporta métricas para integrar con tus sistemas de monitoreo |
 
-- ✅ **Failover automático** entre proveedores (OpenAI → Anthropic → Local)
-- ✅ **Caché inteligente** para reducir costes y latencia
-- ✅ **Métricas en tiempo real** para monitorizar la salud
-- ✅ **Logs estructurados** para depurar problemas
->>>>>>> b011fca1f048d402212fded110a6fddb45a10859
+---
 
 ## 🚀 Inicio rápido
 
@@ -36,53 +46,36 @@ git clone https://github.com/lecodev-26/sentinelflow.git
 cd sentinelflow
 
 # Instalar dependencias
-<<<<<<< HEAD
 go mod tidy
 
 # Ejecutar
 go run cmd/proxy/main.go
 ```
-## 📊 Dashboard
-Abre tu navegador en: http://localhost:8080/dashboard
 
-## 📈 Métricas
-Métricas Prometheus disponibles en: http://localhost:9090/metrics
+## 🌐 Accede a:
+Servicio	URL
+
+Proxy	http://localhost:8080
+Dashboard	http://localhost:8080/dashboard
+Métricas	http://localhost:9090/metrics
+Health Check	http://localhost:8080/health
 
 ## 🔧 Configuración
-Edita configs/rules.yaml para personalizar:
-=======
-```bash
-make deps
-```
-
-# Ejecutar el proxy
-```bash
-make run
-```
-
-# Probar que funciona
-```bash
-curl http://localhost:8080/health
-```
-
-📋 Configuración
-
-Edita configs/rules.yaml para definir tus proveedores y reglas:
+Edita configs/rules.yaml:
 
 ```yaml
 providers:
   - name: openai
     url: "https://api.openai.com/v1"
     fallback: anthropic
-<<<<<<< HEAD
-    
+    headers:
+      Authorization: "Bearer ${OPENAI_API_KEY}"
+      
   - name: anthropic
     url: "https://api.anthropic.com/v1"
     fallback: local-llama
-    
-  - name: local-llama
-    url: "http://localhost:11434/api"
-    fallback: ""
+    headers:
+      x-api-key: "${ANTHROPIC_API_KEY}"
 
 rules:
   - path: "/v1/chat/completions"
@@ -92,55 +85,63 @@ rules:
 ```
 ## 🔑 Variables de entorno
 ```bash
-export OPENAI_API_KEY="sk-tu-key"
-export ANTHROPIC_API_KEY="ant-tu-key"
+export OPENAI_API_KEY="sk-tu-key-aqui"
+export ANTHROPIC_API_KEY="ant-tu-key-aqui"
 ```
 ## 🏗️ Arquitectura
-[Agente IA] → [SentinelFlow] → [Proveedores (OpenAI, Anthropic, Local)]
-                    ↓
-              [Dashboard Web]
-                    ↓
-              [Métricas Prometheus]
-              
+text
+┌─────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   Agente IA │────▶│   SentinelFlow  │────▶│  OpenAI API     │
+│   (Cliente) │     │   (Proxy)       │     │  Anthropic API  │
+└─────────────┘     │                 │     │  Local Llama    │
+                    └────────┬────────┘     └─────────────────┘
+                             │
+                    ┌────────▼────────┐
+                    │   Dashboard     │
+                    │   Prometheus    │
+                    └─────────────────┘
 ## 🛠️ Tecnologías
-Go 1.21 - Lenguaje principal
-
-Gorilla Mux - Router HTTP
-
-Prometheus - Métricas
-
-Logrus - Logs estructurados
-
-YAML - Configuración
-
-Chart.js - Dashboard
+- Tecnología	Uso
+- Go 1.21	Lenguaje principal
+- Gorilla Mux	Router HTTP
+- Prometheus	Métricas y monitoreo
+- Logrus	Logs estructurados
+- Chart.js	Gráficos en el dashboard
+- YAML	Configuración
 
 ## 📋 Roadmap
-☑ Proxy con failover
-☑ Dashboard en tiempo real
-☑ Métricas Prometheus
-☑ Rate Limiting
-☑ Smart Routing
-□ Semantic Cache (próximo)
-□ Autenticación JWT (próximo)
+Estado	Funcionalidad
+✅	Proxy con failover automático
+✅	Dashboard en tiempo real
+✅	Métricas Prometheus
+✅	Rate Limiting (100 req/min)
+✅	Smart Routing por modelo
+✅	Caché en memoria
+✅	Logs estructurados
+🔜	Semantic Cache (embeddings)
+🔜	Autenticación JWT
+🔜	Health Checks activos
 
 ## 🤝 Contribuciones
-¡Las contribuciones son bienvenidas! Abre un issue o PR.
+¡Las contribuciones son bienvenidas!
+
+Fork el repositorio
+
+Crea una rama: git checkout -b feature/nueva-funcionalidad
+
+Haz commit: git commit -m "Añadir nueva funcionalidad"
+
+Push: git push origin feature/nueva-funcionalidad
+
+Abre un Pull Request
 
 ## 📄 Licencia
 MIT License - ver LICENSE para más detalles.
 
-## ⭐ ¡Dános una estrella!
-Si este proyecto te ha sido útil, ¡dale una estrella en GitHub!
-=======
+<div align="center">
+⭐ ¡Si te ha sido útil, dale una estrella! ⭐
 
+https://img.shields.io/badge/Twitter-1DA1F2?style=for-the-badge&logo=twitter&logoColor=white
+https://img.shields.io/badge/LinkedIn-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white
 
-## 📊 Roadmap
-
-☐ Carga de configuración
-☐ Proxy reverso con failover
-☐ Caché en memoria
-☐ Métricas y dashboard
-☐ Tests y documentación
-☐ Dockerización
-
+</div> 
