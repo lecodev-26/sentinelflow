@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SentinelFlow — Control Plane</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#070a10;--panel:#0d121b;--panel2:#101722;--line:#1c2635;--text:#e7edf5;--muted:#7f8da3;
+  --accent:#7c8cff;--cyan:#49d8ff;--green:#38d39f;--amber:#f5c451;--red:#ff667d;
+  --shadow:0 18px 60px rgba(0,0,0,.28);--radius:18px;
+}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:radial-gradient(900px 500px at 85% -10%,rgba(124,140,255,.13),transparent 60%),var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+button{font:inherit}a{color:inherit;text-decoration:none}
+.app{display:grid;grid-template-columns:250px 1fr;min-height:100vh}
+.sidebar{position:sticky;top:0;height:100vh;border-right:1px solid var(--line);background:rgba(8,11,17,.84);backdrop-filter:blur(18px);padding:22px 14px;display:flex;flex-direction:column}
+.brand{display:flex;align-items:center;gap:11px;padding:4px 10px 24px}.brandmark{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:linear-gradient(145deg,var(--accent),#5969f4);box-shadow:0 8px 30px rgba(124,140,255,.25);font-weight:900}.brand strong{font-size:15px;letter-spacing:.2px}.brand span{display:block;color:var(--muted);font-size:11px;margin-top:2px}
+.nav-label{font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:#556176;padding:12px 10px 8px}.nav a{display:flex;gap:11px;align-items:center;padding:11px 12px;border-radius:12px;color:#94a0b2;font-size:13px;margin:3px 0}.nav a.active,.nav a:hover{background:#111927;color:#fff}.nav a.active{box-shadow:inset 2px 0 var(--accent)}.icon{width:18px;text-align:center;opacity:.9}
+.side-bottom{margin-top:auto}.env{border:1px solid var(--line);background:linear-gradient(180deg,#0f1621,#0b1018);padding:13px;border-radius:14px}.env .row{display:flex;justify-content:space-between;font-size:11px;margin:5px 0}.env .row span:first-child{color:var(--muted)}
+.main{min-width:0;padding:26px 30px 34px;max-width:1600px;width:100%;margin:auto}
+.topbar{display:flex;justify-content:space-between;gap:20px;align-items:center;margin-bottom:26px}.eyebrow{font-size:11px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase}.title{font-size:28px;font-weight:750;margin:5px 0}.subtitle{color:var(--muted);font-size:13px}.actions{display:flex;align-items:center;gap:9px}.btn{border:1px solid var(--line);background:#0d131d;color:#b8c3d3;border-radius:10px;padding:9px 12px;cursor:pointer}.btn:hover{border-color:#344258;color:#fff}.live{display:flex;align-items:center;gap:7px;padding:8px 11px;border:1px solid rgba(56,211,159,.2);background:rgba(56,211,159,.07);border-radius:999px;color:#8be8c7;font-size:12px}.pulse{width:7px;height:7px;background:var(--green);border-radius:50%;box-shadow:0 0 0 5px rgba(56,211,159,.08);animation:pulse 1.8s infinite}@keyframes pulse{50%{opacity:.45}}
+.grid-kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-bottom:13px}.card{background:linear-gradient(180deg,rgba(16,23,34,.92),rgba(10,15,23,.92));border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}.kpi{padding:18px}.kpi-head{display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.07em}.kpi-icon{width:30px;height:30px;border:1px solid var(--line);border-radius:9px;display:grid;place-items:center;background:#111925}.kpi-value{font-size:29px;font-weight:720;letter-spacing:-.04em;margin:12px 0 5px}.trend{font-size:11px;color:#718097}.trend.good{color:var(--green)}.trend.warn{color:var(--amber)}
+.layout{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(300px,.85fr);gap:13px}.panel{padding:18px}.panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:15px}.panel-title{font-size:14px;font-weight:650}.panel-sub{font-size:11px;color:var(--muted);margin-top:4px}.select{background:#0b111a;border:1px solid var(--line);color:#aeb9c9;border-radius:8px;padding:7px 9px;font-size:11px}.chart-wrap{height:245px;position:relative}.providers{display:grid;gap:9px}.provider{border:1px solid var(--line);background:#0a1018;border-radius:13px;padding:12px;display:grid;grid-template-columns:1fr auto;gap:8px}.p-name{display:flex;align-items:center;gap:9px;font-size:13px;font-weight:600}.dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}.dot.online{background:var(--green);box-shadow:0 0 12px rgba(56,211,159,.45)}.dot.offline{background:var(--red)}.dot.degraded{background:var(--amber)}.p-meta{font-size:10px;color:var(--muted);margin:5px 0 0 17px}.p-status{font-size:10px;color:#91a0b5}.bar{height:4px;background:#172131;border-radius:9px;overflow:hidden;margin-top:9px;grid-column:1/-1}.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--cyan));border-radius:9px}
+.bottom{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-top:13px}.metric-list{display:grid;gap:10px}.metric-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}.metric-row span{font-size:12px;color:#9aa7ba}.metric-row b{font-size:12px}.mini-bar{height:6px;background:#151f2d;border-radius:99px;grid-column:1/-1}.mini-bar i{display:block;height:100%;border-radius:99px;background:var(--accent)}
+.logs{margin-top:13px}.logbox{height:255px;overflow:auto;background:#080d14;border:1px solid #17202d;border-radius:12px;padding:4px}.log{display:grid;grid-template-columns:70px 54px 1fr;gap:9px;padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.035);font:11px ui-monospace,SFMono-Regular,Menlo,monospace}.log:last-child{border:0}.time{color:#56647a}.level{font-weight:700}.level.info{color:#6da7ff}.level.warn{color:var(--amber)}.level.error{color:var(--red)}.msg{color:#9ba7b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.footer{padding:16px 2px 0;color:#536076;font-size:10px;display:flex;justify-content:space-between}.health-badge{font-size:10px;padding:4px 7px;border-radius:6px;background:#101925;color:#8b98aa}
+.empty{color:#66748a;font-size:12px;padding:22px;text-align:center}.error{color:#ff8798}
+@media(max-width:1050px){.app{grid-template-columns:76px 1fr}.brand div:not(.brandmark),.nav-label,.nav a span:not(.icon),.env{display:none}.sidebar{padding:18px 10px}.brand{justify-content:center;padding:4px 0 20px}.nav a{justify-content:center}.main{padding:22px}.grid-kpi{grid-template-columns:repeat(2,1fr)}.layout,.bottom{grid-template-columns:1fr}}
+@media(max-width:650px){.app{display:block}.sidebar{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line);padding:10px 14px}.brand{justify-content:flex-start;padding:4px}.brand div:not(.brandmark){display:block}.nav{display:none}.main{padding:17px 13px}.topbar{align-items:flex-start}.actions .btn{display:none}.grid-kpi{grid-template-columns:1fr 1fr;gap:9px}.kpi{padding:14px}.kpi-value{font-size:23px}.title{font-size:23px}.footer{display:block}.footer span{display:block;margin-top:5px}}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="sidebar">
+  <div class="brand"><div class="brandmark">S</div><div><strong>SentinelFlow</strong><span>AI resilience control plane</span></div></div>
+  <div class="nav-label">Control plane</div>
+  <nav class="nav">
+    <a class="active" href="#overview"><span class="icon">◈</span><span>Overview</span></a>
+    <a href="#providers"><span class="icon">◎</span><span>Providers</span></a>
+    <a href="#routing"><span class="icon">⇄</span><span>Routing</span></a>
+    <a href="#cache"><span class="icon">▣</span><span>Cache</span></a>
+    <a href="#logs"><span class="icon">≡</span><span>Live logs</span></a>
+  </nav>
+  <div class="nav-label">Observability</div>
+  <nav class="nav">
+    <a href="/metrics" target="_blank"><span class="icon">⌁</span><span>Prometheus</span></a>
+    <a href="#system"><span class="icon">⚙</span><span>System</span></a>
+  </nav>
+  <div class="side-bottom">
+    <div class="env"><div class="row"><span>Gateway</span><b id="gatewayState">checking</b></div><div class="row"><span>Refresh</span><b>3s</b></div><div class="row"><span>API</span><b>v1</b></div></div>
+  </div>
+</aside>
+
+<main class="main" id="overview">
+  <header class="topbar">
+    <div><div class="eyebrow">Operations / Gateway</div><div class="title">System overview</div><div class="subtitle">Resilience, traffic and provider health in one place.</div></div>
+    <div class="actions"><div class="live"><i class="pulse"></i><span id="liveText">Live</span></div><button class="btn" id="refreshBtn">↻ Refresh</button></div>
+  </header>
+
+  <section class="grid-kpi">
+    <article class="card kpi"><div class="kpi-head"><span>Requests</span><span class="kpi-icon">↗</span></div><div class="kpi-value" id="totalRequests">—</div><div class="trend" id="reqRate">waiting for metrics</div></article>
+    <article class="card kpi"><div class="kpi-head"><span>Cache hit rate</span><span class="kpi-icon">◉</span></div><div class="kpi-value" id="cacheRate">—</div><div class="trend" id="cacheMeta">— hits · — misses</div></article>
+    <article class="card kpi"><div class="kpi-head"><span>Fallbacks</span><span class="kpi-icon">⇄</span></div><div class="kpi-value" id="fallbacks">—</div><div class="trend" id="fallbackMeta">resilience events</div></article>
+    <article class="card kpi"><div class="kpi-head"><span>Rate limits</span><span class="kpi-icon">⊘</span></div><div class="kpi-value" id="rateLimitHits">—</div><div class="trend warn" id="rateMeta">blocked requests</div></article>
+  </section>
+
+  <section class="layout">
+    <article class="card panel">
+      <div class="panel-head"><div><div class="panel-title">Traffic & latency</div><div class="panel-sub">Observed from the gateway metrics endpoint</div></div><select class="select" id="chartMode"><option value="requests">Requests / poll</option><option value="latency">Histogram p95 estimate</option></select></div>
+      <div class="chart-wrap"><canvas id="trafficChart"></canvas></div>
+    </article>
+    <article class="card panel" id="providers">
+      <div class="panel-head"><div><div class="panel-title">Provider health</div><div class="panel-sub">Status reported by SentinelFlow</div></div><span class="health-badge" id="providerCount">—</span></div>
+      <div class="providers" id="providersList"><div class="empty">Loading providers…</div></div>
+    </article>
+  </section>
+
+  <section class="bottom">
+    <article class="card panel" id="routing">
+      <div class="panel-head"><div><div class="panel-title">Resilience</div><div class="panel-sub">Fallback and provider failure counters</div></div></div>
+      <div class="metric-list">
+        <div class="metric-row"><span>Provider failures</span><b id="providerFailures">—</b><div class="mini-bar"><i id="failureBar" style="width:0%"></i></div></div>
+        <div class="metric-row"><span>Fallback events</span><b id="fallbackValue">—</b><div class="mini-bar"><i id="fallbackBar" style="width:0%"></i></div></div>
+        <div class="metric-row"><span>Rate-limit events</span><b id="rateValue">—</b><div class="mini-bar"><i id="rateBar" style="width:0%"></i></div></div>
+      </div>
+    </article>
+    <article class="card panel" id="cache">
+      <div class="panel-head"><div><div class="panel-title">Cache efficiency</div><div class="panel-sub">In-memory cache counters exposed by the gateway</div></div></div>
+      <div class="metric-list">
+        <div class="metric-row"><span>Hits</span><b id="cacheHits">—</b><div class="mini-bar"><i id="hitBar" style="width:0%"></i></div></div>
+        <div class="metric-row"><span>Misses</span><b id="cacheMisses">—</b><div class="mini-bar"><i id="missBar" style="width:0%"></i></div></div>
+        <div class="metric-row"><span>Hit / total</span><b id="cacheRatio">—</b></div>
+      </div>
+    </article>
+  </section>
+
+  <section class="card panel logs" id="logs">
+    <div class="panel-head"><div><div class="panel-title">Live logs</div><div class="panel-sub">Server-sent events from <code>/api/logs/stream</code></div></div><span class="health-badge" id="logState">connecting…</span></div>
+    <div class="logbox" id="logsContent"><div class="empty">Waiting for events…</div></div>
+  </section>
+
+  <div class="footer"><span>SentinelFlow Control Plane · dashboard compatible with current v1 endpoints</span><span id="lastUpdate">Last update —</span></div>
+</main>
+</div>
+
+<script>
+const state={prevRequests:null,prevAt:null,chartMode:'requests',chart:null};
+const $=id=>document.getElementById(id);
+const fmt=n=>Number(n||0).toLocaleString('en-US');
+const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+function parseProm(text){
+  const out={requests:0,hits:0,misses:0,fallbacks:0,rate:0,failures:0,latSum:0,latCount:0,series:{}};
+  for(const line of text.split('\\n')){
+    if(!line||line[0]==='#') continue;
+    const m=line.match(/^([a-zA-Z_:][\\w:]*)(\\{([^}]*)\\})?\\s+([\\d.eE+-]+)$/); if(!m) continue;
+    const name=m[1], value=Number(m[4]);
+    if(name==='sentinel_cache_hits_total')out.hits+=value;
+    else if(name==='sentinel_cache_misses_total')out.misses+=value;
+    else if(name==='sentinel_ratelimit_hits_total')out.rate+=value;
+    else if(name==='sentinel_provider_failures_total')out.failures+=value;
+    else if(name==='sentinel_fallbacks_total')out.fallbacks+=value;
+    else if(name==='sentinel_requests_total')out.requests+=value;
+    else if(name==='sentinel_request_duration_seconds_sum')out.latSum+=value;
+    else if(name==='sentinel_request_duration_seconds_count')out.latCount+=value;
+  }
+  return out;
+}
+async function getMetrics(){
+  for(const url of ['/metrics','http://localhost:9090/metrics']){
+    try{const r=await fetch(url,{cache:'no-store'});if(r.ok)return parseProm(await r.text())}catch(e){}
+  }
+  throw new Error('metrics unavailable');
+}
+function setBar(id,value,max){$(id).style.width=Math.min(100,max?value/max*100:0)+'%'}
+function updateKPIs(m){
+  $('totalRequests').textContent=fmt(m.requests);
+  const total=m.hits+m.misses, rate=total?m.hits/total*100:0;
+  $('cacheRate').textContent=rate.toFixed(1)+'%'; $('cacheMeta').textContent=`${fmt(m.hits)} hits · ${fmt(m.misses)} misses`;
+  $('fallbacks').textContent=fmt(m.fallbacks); $('fallbackMeta').textContent='resilience events observed';
+  $('rateLimitHits').textContent=fmt(m.rate); $('rateMeta').textContent='blocked requests observed';
+  $('providerFailures').textContent=fmt(m.failures); $('fallbackValue').textContent=fmt(m.fallbacks); $('rateValue').textContent=fmt(m.rate);
+  $('cacheHits').textContent=fmt(m.hits); $('cacheMisses').textContent=fmt(m.misses); $('cacheRatio').textContent=rate.toFixed(1)+'%';
+  const mx=Math.max(1,m.requests,m.failures,m.fallbacks,m.rate); setBar('failureBar',m.failures,mx);setBar('fallbackBar',m.fallbacks,mx);setBar('rateBar',m.rate,mx);
+  const cm=Math.max(1,total);setBar('hitBar',m.hits,cm);setBar('missBar',m.misses,cm);
+  const now=Date.now();
+  if(state.prevRequests!==null){const dt=(now-state.prevAt)/1000;const rpm=Math.max(0,(m.requests-state.prevRequests)/dt*60);$('reqRate').textContent=rpm.toFixed(1)+' req/min observed'}
+  state.prevRequests=m.requests;state.prevAt=now;
+  $('lastUpdate').textContent='Last update '+new Date().toLocaleTimeString();
+  $('gatewayState').textContent='online';
+}
+function initChart(){
+  state.chart=new Chart($('trafficChart'),{type:'line',data:{labels:[],datasets:[{label:'Requests / poll',data:[],borderWidth:2,pointRadius:2,tension:.35,fill:true}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#5e6b80',maxTicksLimit:8},grid:{color:'rgba(255,255,255,.03)'}},y:{beginAtZero:true,ticks:{color:'#5e6b80'},grid:{color:'rgba(255,255,255,.04)'}}}}});
+}
+function pushChart(m){
+  const label=new Date().toLocaleTimeString();let val=m.requests;
+  if(state.chartMode==='latency') val=m.latCount?m.latSum/m.latCount*1000:0;
+  state.chart.data.labels.push(label);state.chart.data.datasets[0].data.push(val);state.chart.data.datasets[0].label=state.chartMode==='requests'?'Requests total':'Average latency (ms)';
+  if(state.chart.data.labels.length>24){state.chart.data.labels.shift();state.chart.data.datasets[0].data.shift()} state.chart.update('none');
+}
+async function loadProviders(){
+  try{const r=await fetch('/api/providers',{cache:'no-store'});if(!r.ok)throw 0;const list=await r.json();$('providerCount').textContent=list.length+' configured';
+    $('providersList').innerHTML=list.map(p=>{const s=String(p.status||'unknown').toLowerCase();const cls=s.includes('online')?'online':s.includes('degrad')?'degraded':s.includes('offline')?'offline':'';return `<div class="provider"><div><div class="p-name"><i class="dot ${cls}"></i>${esc(p.name)}</div><div class="p-meta">${esc(p.url||'provider endpoint')}</div></div><div class="p-status">${esc(p.status||'unknown')}</div><div class="bar"><i style="width:${cls==='online'?100:cls==='degraded'?55:cls==='offline'?5:25}%"></i></div></div>`}).join('')||'<div class="empty">No providers configured</div>';
+  }catch(e){$('providerCount').textContent='unavailable';$('providersList').innerHTML='<div class="empty error">Could not load /api/providers</div>';$('gatewayState').textContent='degraded'}
+}
+async function refresh(){
+  try{const m=await getMetrics();updateKPIs(m);pushChart(m);$('liveText').textContent='Live'}catch(e){$('liveText').textContent='Metrics offline';$('gatewayState').textContent='degraded'}
+  loadProviders();
+}
+function connectLogs(){
+  if(!window.EventSource)return;
+  const es=new EventSource('/api/logs/stream');
+  es.onopen=()=>{$('logState').textContent='connected'};
+  es.onmessage=e=>{try{const l=JSON.parse(e.data);const box=$('logsContent');if(box.querySelector('.empty'))box.innerHTML='';const row=document.createElement('div');row.className='log';const level=String(l.level||'info').toLowerCase();row.innerHTML=`<span class="time">${esc(l.time||'--:--:--')}</span><span class="level ${level}">[${esc(level)}]</span><span class="msg">${esc(l.message||'')}</span>`;box.prepend(row);while(box.children.length>80)box.lastChild.remove();$('logState').textContent='connected'}catch(_){}};
+  es.onerror=()=>{$('logState').textContent='reconnecting…'};
+}
+$('refreshBtn').onclick=refresh;$('chartMode').onchange=e=>{state.chartMode=e.target.value;if(state.chartMode==='latency')state.chart.data.datasets[0].label='Average latency (ms)';};
+document.addEventListener('DOMContentLoaded',()=>{initChart();refresh();connectLogs();setInterval(refresh,3000)});
+</script>
+</body>
+</html>
