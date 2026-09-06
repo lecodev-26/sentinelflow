@@ -69,7 +69,6 @@ curl http://localhost:8080/health
 
 Edita configs/rules.yaml para definir tus proveedores y reglas:
 
->>>>>>> b011fca1f048d402212fded110a6fddb45a10859
 ```yaml
 providers:
   - name: openai
