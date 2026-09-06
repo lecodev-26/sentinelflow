@@ -10,8 +10,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/TU-USUARIO/sentinelflow/internal/proxy"
-)
+	"github.com/lecodev-26/sentinelflow/internal/proxy"
+
 
 func main() {
 	// Flags de línea de comandos
@@ -28,10 +28,15 @@ func main() {
 		log.Fatalf("❌ Error creando proxy: %v", err)
 	}
 
+	// Configurar rutas
+	mux := http.NewServeMux()
+	mux.Handle("/", p.Handler())
+	mux.HandleFunc("/health", p.HealthCheck)
+
 	// Servidor HTTP
 	srv := &http.Server{
 		Addr:         ":" + *port,
-		Handler:      p.Handler(),
+		Handler:      mux,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -43,6 +48,7 @@ func main() {
 
 	go func() {
 		log.Printf("✅ Proxy escuchando en http://localhost:%s", *port)
+		log.Printf("📊 Health check: http://localhost:%s/health", *port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("❌ Error en el servidor: %v", err)
 		}
