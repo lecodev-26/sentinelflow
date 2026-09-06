@@ -1,4 +1,6 @@
 # 🛡️ SentinelFlow - Firewall de Resiliencia para Agentes IA
+[![GitHub last commit](https://img.shields.io/github/last-commit/lecodev-26/sentinelflow?style=flat-square)](https://github.com/lecodev-26/sentinelflow)
+[![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/lecodev-26/sentinelflow?style=flat-square)](https://github.com/lecodev-26/sentinelflow)
 
 [![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
