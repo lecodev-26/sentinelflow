@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  sentinelflow:
+    build: .
+    container_name: sentinelflow
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    volumes:
+      - ./configs:/configs
+      - ./logs:/logs
+    restart: unless-stopped
