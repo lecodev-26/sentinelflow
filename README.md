@@ -15,7 +15,7 @@
 
 ```bash
 # Clonar el repositorio
-git clone https://github.com/tu-usuario/sentinelflow.git
+git clone https://github.com/lecodev-26/sentinelflow.git
 cd sentinelflow
 
 # Instalar dependencias
