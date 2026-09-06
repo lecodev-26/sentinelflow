@@ -1,0 +1,43 @@
+# Binarios
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+dist/
+
+# Go
+*.test
+*.out
+go.work
+go.work.sum
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Configuración local (con keys)
+configs/local.yaml
+.env
+.env.local
+
+# Logs
+logs/
+*.log
+
+# Dashboard (si usas npm)
+web/dashboard/node_modules/
+web/dashboard/build/
+web/dashboard/.env.local
+
+# Ejecutables
+proxy.exe
+sentinel-proxy
