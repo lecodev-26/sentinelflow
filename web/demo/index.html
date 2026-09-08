@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SentinelFlow Demo</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0a0a1a;
+            color: #e0e0e0;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        .header {
+            text-align: center;
+            padding: 60px 0;
+        }
+
+        .header h1 {
+            font-size: 48px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #667eea, #764ba2, #00b894);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header p {
+            font-size: 20px;
+            color: #888;
+            margin-top: 16px;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .badge-container {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 24px;
+        }
+
+        .badge {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 500;
+            background: rgba(102, 126, 234, 0.15);
+            color: #667eea;
+            border: 1px solid rgba(102, 126, 234, 0.2);
+        }
+
+        .badge.green {
+            background: rgba(0, 184, 148, 0.15);
+            color: #00b894;
+            border-color: rgba(0, 184, 148, 0.2);
+        }
+
+        .badge.purple {
+            background: rgba(118, 75, 162, 0.15);
+            color: #a29bfe;
+            border-color: rgba(118, 75, 162, 0.2);
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+            margin: 60px 0;
+        }
+
+        .feature-card {
+            background: #1a1a2e;
+            padding: 32px;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            transition: all 0.3s ease;
+        }
+
+        .feature-card:hover {
+            border-color: rgba(102, 126, 234, 0.3);
+            transform: translateY(-4px);
+        }
+
+        .feature-card .icon {
+            font-size: 32px;
+            margin-bottom: 16px;
+        }
+
+        .feature-card h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .feature-card p {
+            color: #888;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .demo-section {
+            background: #1a1a2e;
+            border-radius: 16px;
+            padding: 40px;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            margin: 40px 0;
+        }
+
+        .demo-section h2 {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 24px;
+        }
+
+        .demo-row {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .demo-input {
+            flex: 1;
+            padding: 12px 16px;
+            border-radius: 8px;
+            background: #0a0a1a;
+            border: 1px solid #2a2a4a;
+            color: #e0e0e0;
+            font-size: 14px;
+            min-width: 200px;
+        }
+
+        .demo-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .demo-btn {
+            padding: 12px 32px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .demo-btn:hover {
+            transform: scale(1.02);
+            opacity: 0.9;
+        }
+
+        .demo-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .demo-output {
+            background: #0a0a1a;
+            border-radius: 8px;
+            padding: 20px;
+            min-height: 100px;
+            border: 1px solid #2a2a4a;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.8;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .demo-output .thinking {
+            color: #888;
+            font-style: italic;
+        }
+
+        .demo-output .chunk {
+            color: #00b894;
+        }
+
+        .demo-output .done {
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 16px;
+            margin: 24px 0;
+        }
+
+        .stat-card {
+            background: #0a0a1a;
+            padding: 16px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid #2a2a4a;
+        }
+
+        .stat-card .value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        .stat-card .label {
+            font-size: 12px;
+            color: #888;
+            margin-top: 4px;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 40px 0;
+            border-top: 1px solid #1a1a2e;
+            margin-top: 40px;
+            color: #555;
+            font-size: 14px;
+        }
+
+        .footer a {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 32px;
+            }
+            .demo-row {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🛡️ SentinelFlow</h1>
+            <p>AI Gateway &amp; Control Plane - Demo interactiva</p>
+            <div class="badge-container">
+                <span class="badge">✅ Failover Automático</span>
+                <span class="badge green">✅ Smart Routing</span>
+                <span class="badge purple">✅ Rate Limiting</span>
+                <span class="badge">✅ Open Source</span>
+            </div>
+        </div>
+
+        <div class="features">
+            <div class="feature-card">
+                <div class="icon">🔄</div>
+                <h3>Failover Automático</h3>
+                <p>Si un proveedor falla, cambia automáticamente al siguiente sin intervención.</p>
+            </div>
+            <div class="feature-card">
+                <div class="icon">🎯</div>
+                <h3>Smart Routing</h3>
+                <p>Cada modelo se enruta al mejor proveedor: GPT → OpenAI, Claude → Anthropic.</p>
+            </div>
+            <div class="feature-card">
+                <div class="icon">📊</div>
+                <h3>Observabilidad</h3>
+                <p>Métricas en tiempo real, dashboards y tracing distribuido con OpenTelemetry.</p>
+            </div>
+            <div class="feature-card">
+                <div class="icon">🛡️</div>
+                <h3>Seguridad</h3>
+                <p>PII detection, prompt injection, autenticación y políticas configurables.</p>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>🚀 Prueba SentinelFlow</h2>
+            <p style="color: #888; margin-bottom: 20px;">
+                Escribe un mensaje y observa cómo el gateway enruta inteligentemente la petición.
+            </p>
+
+            <div class="demo-row">
+                <input type="text" class="demo-input" id="promptInput" placeholder="Escribe tu mensaje aquí..." value="¿Qué es la inteligencia artificial?">
+                <button class="demo-btn" id="sendBtn">Enviar</button>
+            </div>
+
+            <div class="demo-output" id="demoOutput">
+                <span class="thinking">💭 Escribe un mensaje para comenzar la demo...</span>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="value" id="statRequests">0</div>
+                    <div class="label">Peticiones</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value" id="statProvider">-</div>
+                    <div class="label">Proveedor</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value" id="statLatency">0ms</div>
+                    <div class="label">Latencia</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value" id="statCost">$0.00</div>
+                    <div class="label">Coste</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>
+                SentinelFlow es un proyecto Open Source.
+                <br>
+                <a href="https://github.com/lecodev-26/sentinelflow" target="_blank">⭐ GitHub</a> ·
+                <a href="https://github.com/lecodev-26/sentinelflow" target="_blank">📦 Repositorio</a> ·
+                <a href="https://github.com/lecodev-26/sentinelflow/issues" target="_blank">🐛 Issues</a>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        let requestCount = 0;
+
+        const promptInput = document.getElementById('promptInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const demoOutput = document.getElementById('demoOutput');
+        const statRequests = document.getElementById('statRequests');
+        const statProvider = document.getElementById('statProvider');
+        const statLatency = document.getElementById('statLatency');
+        const statCost = document.getElementById('statCost');
+
+        // Simulación de demo (en producción conectar con API real)
+        sendBtn.addEventListener('click', async () => {
+            const prompt = promptInput.value.trim();
+            if (!prompt) return;
+
+            sendBtn.disabled = true;
+            demoOutput.innerHTML = `<span class="thinking">⏳ Procesando... (simulando conexión al gateway)</span>`;
+
+            try {
+                // Simular latencia y respuesta
+                const startTime = Date.now();
+
+                // Simular streaming de respuesta
+                const responses = [
+                    `🔍 Analizando: "${prompt}"`,
+                    `🧠 Procesando con modelo...`,
+                    `✨ ${getRandomResponse(prompt)}`
+                ];
+
+                // Simular diferentes proveedores
+                const providers = ['openai', 'anthropic', 'local-llama'];
+                const provider = providers[Math.floor(Math.random() * providers.length)];
+                const latency = Math.floor(Math.random() * 800) + 200;
+                const cost = (Math.random() * 0.005 + 0.001).toFixed(4);
+
+                demoOutput.innerHTML = '';
+
+                for (let i = 0; i < responses.length; i++) {
+                    await sleep(600);
+                    const chunk = document.createElement('div');
+                    chunk.className = 'chunk';
+                    chunk.textContent = responses[i];
+                    demoOutput.appendChild(chunk);
+                    demoOutput.scrollTop = demoOutput.scrollHeight;
+                }
+
+                const elapsed = Date.now() - startTime;
+
+                // Actualizar estadísticas
+                requestCount++;
+                statRequests.textContent = requestCount;
+                statProvider.textContent = provider;
+                statLatency.textContent = `${elapsed}ms`;
+                statCost.textContent = `$${cost}`;
+
+                const done = document.createElement('div');
+                done.className = 'done';
+                done.textContent = `✅ Completado (${provider}) - ${elapsed}ms`;
+                demoOutput.appendChild(done);
+
+            } catch (error) {
+                demoOutput.innerHTML = `<span class="thinking">❌ Error: ${error.message}</span>`;
+            }
+
+            sendBtn.disabled = false;
+        });
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        function getRandomResponse(prompt) {
+            const responses = [
+                `La inteligencia artificial es un campo de la informática que busca crear sistemas capaces de realizar tareas que normalmente requieren inteligencia humana. Esto incluye aprendizaje, razonamiento, percepción y comprensión del lenguaje natural.`,
+                `La IA se divide en varias subdisciplinas: machine learning, deep learning, procesamiento de lenguaje natural, visión por computador y robótica. Cada una tiene aplicaciones específicas en el mundo real.`,
+                `Actualmente, los modelos de IA como GPT-4, Claude y Llama están revolucionando la forma en que interactuamos con la tecnología. Estos modelos pueden generar texto, imágenes y código con una calidad sorprendente.`,
+                `El futuro de la IA pasa por sistemas más eficientes, éticos y accesibles. SentinelFlow ayuda a gestionar estos modelos de forma segura y eficiente.`,
+                `Una de las aplicaciones más importantes de la IA es en el campo de la salud, donde ayuda en diagnósticos médicos, descubrimiento de fármacos y atención personalizada.`,
+                `La IA también tiene aplicaciones en la educación, permitiendo experiencias de aprendizaje personalizadas y adaptativas para cada estudiante.`,
+                `En el ámbito empresarial, la IA se usa para automatizar procesos, analizar datos y mejorar la toma de decisiones.`,
+                `Los sistemas de IA modernos utilizan transformers y mecanismos de atención para procesar secuencias de texto de manera más eficiente y precisa.`
+            ];
+            return responses[Math.floor(Math.random() * responses.length)];
+        }
+    </script>
+</body>
+</html>
