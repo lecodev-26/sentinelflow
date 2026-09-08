@@ -163,7 +163,7 @@ export ANTHROPIC_API_KEY="ant-tu-key-aqui"
 ---
 
 🛠️ Tecnologías
-
+```marckdown
 Tecnología Uso
 Go 1.21 Lenguaje principal
 Gorilla Mux Router HTTP
@@ -173,11 +173,11 @@ Redis Caché distribuida
 Kubernetes Orquestación
 Helm Despliegue
 Terraform Infraestructura como código
-
+```
 ---
 
 📋 Roadmap
-
+```marckdown
 Estado Funcionalidad
 ✅ Proxy con failover automático
 ✅ Dashboard en tiempo real
@@ -196,7 +196,7 @@ Estado Funcionalidad
 ✅ Cost Tracking + Budgets
 ✅ Semantic Cache
 ✅ Demo interactiva
-
+```
 ---
 
 🤝 Contribuciones
@@ -221,7 +221,5 @@ MIT License - ver LICENSE para más detalles.
 
 ⭐ ¡Si te ha sido útil, dale una estrella! ⭐
 
-https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white
-https://img.shields.io/badge/Twitter-1DA1F2?style=for-the-badge&logo=twitter&logoColor=white
 
 </div>
