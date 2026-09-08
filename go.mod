@@ -3,7 +3,6 @@ module github.com/lecodev-26/sentinelflow
 go 1.27.1
 
 require (
-	github.com/gorilla/mux v1.8.1
 	github.com/prometheus/client_golang v1.24.1
 	github.com/sirupsen/logrus v1.10.2
 	gopkg.in/yaml.v3 v3.0.1
