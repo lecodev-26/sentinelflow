@@ -21,7 +21,9 @@ jobs:
           go-version: '1.21'
 
       - name: Download dependencies
-        run: go mod download
+        run: |
+          go mod download
+          go mod tidy
 
       - name: Vet
         run: go vet ./...
