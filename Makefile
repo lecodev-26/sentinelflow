@@ -47,3 +47,11 @@ help:
 	@echo "  make fmt        - Formatear código"
 	@echo "  make lint       - Linter (golangci-lint)"
 	@echo "  make all        - fmt + vet + test + build"
+
+# E2E Tests
+e2e-test:
+go test -v ./tests/e2e/...
+
+# E2E Tests con timeout
+e2e-test-long:
+go test -v -timeout 5m ./tests/e2e/...
