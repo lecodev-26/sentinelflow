@@ -1,6 +1,7 @@
 package cache
 
 import (
+"context"
 "sync"
 "time"
 )
@@ -18,6 +19,7 @@ type Cache struct {
 items map[string]*Item
 mu    sync.RWMutex
 ttl   time.Duration
+redis *DistributedCache
 }
 
 func NewCache(ttl time.Duration) *Cache {
@@ -27,7 +29,24 @@ ttl:   ttl,
 }
 }
 
+func NewCacheWithRedis(redis *DistributedCache, ttl time.Duration) *Cache {
+return &Cache{
+items: make(map[string]*Item),
+ttl:   ttl,
+redis: redis,
+}
+}
+
 func (c *Cache) Get(key string) (interface{}, bool) {
+if c.redis != nil {
+var value interface{}
+ctx := context.Background()
+found, err := c.redis.Get(ctx, key, &value)
+if err == nil && found {
+return value, true
+}
+}
+
 c.mu.RLock()
 defer c.mu.RUnlock()
 
@@ -45,6 +64,11 @@ return item.Value, true
 }
 
 func (c *Cache) Set(key string, value interface{}) {
+if c.redis != nil {
+ctx := context.Background()
+_ = c.redis.Set(ctx, key, value, c.ttl)
+}
+
 c.mu.Lock()
 defer c.mu.Unlock()
 
@@ -55,6 +79,11 @@ Expiration: time.Now().Add(c.ttl),
 }
 
 func (c *Cache) Delete(key string) {
+if c.redis != nil {
+ctx := context.Background()
+_ = c.redis.Delete(ctx, key)
+}
+
 c.mu.Lock()
 defer c.mu.Unlock()
 delete(c.items, key)
