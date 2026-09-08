@@ -1,107 +1,93 @@
 package logger
 
 import (
-	"os"
+"os"
 
-	"github.com/sirupsen/logrus"
+"github.com/sirupsen/logrus"
 )
 
 var log *logrus.Logger
 
-// Init inicializa el logger con la configuración
 func Init(cfg *struct {
-	Level  string
-	Format string
-	Output string
+Level  string
+Format string
+Output string
 }) {
-	log = logrus.New()
+log = logrus.New()
 
-	// Nivel de log
-	level, err := logrus.ParseLevel(cfg.Level)
-	if err != nil {
-		level = logrus.InfoLevel
-	}
-	log.SetLevel(level)
+level, err := logrus.ParseLevel(cfg.Level)
+if err != nil {
+level = logrus.InfoLevel
+}
+log.SetLevel(level)
 
-	// Formato
-	if cfg.Format == "json" {
-		log.SetFormatter(&logrus.JSONFormatter{})
-	} else {
-		log.SetFormatter(&logrus.TextFormatter{
-			FullTimestamp: true,
-		})
-	}
-
-	// Salida
-	if cfg.Output == "file" {
-		file, err := os.OpenFile("logs/sentinelflow.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-		if err == nil {
-			log.SetOutput(file)
-		} else {
-			log.SetOutput(os.Stdout)
-		}
-	} else {
-		log.SetOutput(os.Stdout)
-	}
+if cfg.Format == "json" {
+log.SetFormatter(&logrus.JSONFormatter{})
+} else {
+log.SetFormatter(&logrus.TextFormatter{
+FullTimestamp: true,
+})
 }
 
-// Get retorna el logger instanciado
+if cfg.Output == "file" {
+file, err := os.OpenFile("logs/sentinelflow.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+if err == nil {
+log.SetOutput(file)
+} else {
+log.SetOutput(os.Stdout)
+}
+} else {
+log.SetOutput(os.Stdout)
+}
+}
+
 func Get() *logrus.Logger {
-	if log == nil {
-<<<<<<< HEAD
-=======
-		// Logger por defecto
->>>>>>> b011fca1f048d402212fded110a6fddb45a10859
-		log = logrus.New()
-		log.SetFormatter(&logrus.TextFormatter{
-			FullTimestamp: true,
-		})
-		log.SetLevel(logrus.InfoLevel)
-	}
-	return log
+if log == nil {
+log = logrus.New()
+log.SetFormatter(&logrus.TextFormatter{
+FullTimestamp: true,
+})
+log.SetLevel(logrus.InfoLevel)
+}
+return log
 }
 
-// Funciones helper
 func Debug(args ...interface{}) {
-	Get().Debug(args...)
+Get().Debug(args...)
 }
 
 func Info(args ...interface{}) {
-	Get().Info(args...)
+Get().Info(args...)
 }
 
 func Warn(args ...interface{}) {
-	Get().Warn(args...)
+Get().Warn(args...)
 }
 
 func Error(args ...interface{}) {
-	Get().Error(args...)
+Get().Error(args...)
 }
 
 func Fatal(args ...interface{}) {
-	Get().Fatal(args...)
+Get().Fatal(args...)
 }
 
 func Debugf(format string, args ...interface{}) {
-	Get().Debugf(format, args...)
+Get().Debugf(format, args...)
 }
 
 func Infof(format string, args ...interface{}) {
-	Get().Infof(format, args...)
+Get().Infof(format, args...)
 }
 
 func Warnf(format string, args ...interface{}) {
-	Get().Warnf(format, args...)
+Get().Warnf(format, args...)
 }
 
 func Errorf(format string, args ...interface{}) {
-	Get().Errorf(format, args...)
+Get().Errorf(format, args...)
 }
 
 func Fatalf(format string, args ...interface{}) {
-	Get().Fatalf(format, args...)
-<<<<<<< HEAD
+Get().Fatalf(format, args...)
 }
-=======
-}
->>>>>>> b011fca1f048d402212fded110a6fddb45a10859
