@@ -39,7 +39,6 @@ func TestLoadSimulation(t *testing.T) {
 t.Skip("Solo para pruebas manuales con el proxy corriendo")
 
 url := "http://localhost:8080/v1/chat/completions"
-concurrency := 50
 requests := 500
 
 var wg sync.WaitGroup
