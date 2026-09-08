@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sentinelflow.fullname" . }}-config
+  labels:
+    {{- include "sentinelflow.labels" . | nindent 4 }}
+data:
+  rules.yaml: |
+    providers: {{ toYaml .Values.config.rules.providers | nindent 6 }}
+    cache: {{ toYaml .Values.config.rules.cache | nindent 6 }}
+    rules: {{ toYaml .Values.config.rules.rules | nindent 6 }}
+    metrics: {{ toYaml .Values.config.rules.metrics | nindent 6 }}
+    logging: {{ toYaml .Values.config.rules.logging | nindent 6 }}

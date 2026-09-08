@@ -1,0 +1,100 @@
+# Default values for sentinelflow
+
+replicaCount: 3
+
+image:
+  repository: sentinelflow
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 8080
+  metricsPort: 9090
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: sentinelflow.local
+      paths:
+        - path: /
+          pathType: Prefix
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+redis:
+  enabled: true
+  url: "redis://redis-service:6379"
+
+config:
+  rules:
+    providers:
+      - name: openai
+        url: "https://api.openai.com/v1"
+        timeout: 30s
+        fallback: anthropic
+      - name: anthropic
+        url: "https://api.anthropic.com/v1"
+        timeout: 30s
+        fallback: local-llama
+      - name: local-llama
+        url: "http://localhost:11434/api"
+        timeout: 60s
+        fallback: ""
+    cache:
+      enabled: true
+      ttl: 300s
+      max_size: 1000
+    rules:
+      - path: "/v1/chat/completions"
+        method: "POST"
+        cache: true
+        providers: ["openai", "anthropic", "local-llama"]
+    metrics:
+      enabled: true
+      port: 9090
+      path: "/metrics"
+    logging:
+      level: "info"
+      format: "json"
+      output: "stdout"
+
+secrets:
+  openai:
+    apiKey: ""
+  anthropic:
+    apiKey: ""
+
+env: []
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 5

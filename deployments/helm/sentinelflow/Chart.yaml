@@ -1,0 +1,19 @@
+apiVersion: v2
+name: sentinelflow
+description: SentinelFlow - AI Gateway and Control Plane
+type: application
+version: 0.2.0
+appVersion: "0.2.0"
+keywords:
+  - ai
+  - gateway
+  - llm
+  - proxy
+  - openai
+  - anthropic
+home: https://github.com/lecodev-26/sentinelflow
+sources:
+  - https://github.com/lecodev-26/sentinelflow
+maintainers:
+  - name: lecodev-26
+    email: lecodev-26@example.com
