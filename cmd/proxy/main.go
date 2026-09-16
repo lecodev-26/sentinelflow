@@ -30,9 +30,9 @@ configFile := flag.String("config", "configs/rules.yaml", "Archivo de configurac
 flag.Parse()
 
 log.Printf("🛡️ SentinelFlow iniciando")
-log.Printf("   Gateway:     :%s", *port)
+log.Printf("   Gateway:       :%s", *port)
 log.Printf("   Control Plane: :%s", *adminPort)
-log.Printf("   Métricas:    :%s", *metricsPort)
+log.Printf("   Métricas:      :%s", *metricsPort)
 
 if err := observability.InitTracing("sentinelflow", ""); err != nil {
 log.Printf("⚠️ Tracing no disponible: %v", err)
@@ -114,7 +114,10 @@ gatewayRouter.PathPrefix("/").Handler(mainHandler)
 // === CONTROL PLANE ROUTER ===
 adminRouter := mux.NewRouter()
 
-// Registrar handlers admin
+// CORS para el dashboard
+adminRouter.Use(corsMiddleware)
+
+// Handlers admin
 orgHandler := controlplane.NewOrganizationHandler(orgMgr)
 orgHandler.Register(adminRouter)
 
@@ -123,6 +126,9 @@ userHandler.Register(adminRouter)
 
 providerHandler := controlplane.NewProviderHandler(p)
 providerHandler.Register(adminRouter)
+
+metricsHandler := controlplane.NewMetricsHandler(p)
+metricsHandler.Register(adminRouter)
 
 // Health del admin
 adminRouter.HandleFunc("/admin/health", func(w http.ResponseWriter, r *http.Request) {
@@ -167,17 +173,6 @@ log.Fatalf("❌ Gateway error: %v", err)
 
 go func() {
 log.Printf("✅ Control Plane en http://localhost:%s", *adminPort)
-log.Printf("   GET    /admin/health")
-log.Printf("   GET    /admin/providers")
-log.Printf("   GET    /admin/circuit-breakers")
-log.Printf("   GET    /admin/organizations")
-log.Printf("   POST   /admin/organizations")
-log.Printf("   GET    /admin/organizations/{id}")
-log.Printf("   POST   /admin/organizations/{id}/projects")
-log.Printf("   POST   /admin/users")
-log.Printf("   GET    /admin/users/{id}")
-log.Printf("   POST   /admin/users/{id}/api-keys")
-log.Printf("   POST   /admin/api-keys/{key}/revoke")
 if err := adminSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 log.Fatalf("❌ Admin error: %v", err)
 }
@@ -202,4 +197,20 @@ metricsSrv.Shutdown(ctx)
 p.Stop()
 
 log.Println("✅ SentinelFlow detenido correctamente")
+}
+
+// corsMiddleware permite peticiones desde el dashboard
+func corsMiddleware(next http.Handler) http.Handler {
+return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+w.Header().Set("Access-Control-Allow-Origin", "*")
+w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+if r.Method == "OPTIONS" {
+w.WriteHeader(http.StatusOK)
+return
+}
+
+next.ServeHTTP(w, r)
+})
 }
