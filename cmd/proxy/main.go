@@ -36,14 +36,12 @@ log.Fatalf("❌ Error creando proxy: %v", err)
 orgMgr := rbac.NewOrganizationManager()
 userMgr := rbac.NewUserManager(orgMgr)
 
-// Crear organización y usuario por defecto para demo
 defaultOrg := orgMgr.CreateOrganization("default", "Default Organization")
 defaultUser, err := userMgr.CreateUser("admin@local", "Admin", rbac.RoleAdmin, defaultOrg.ID)
 if err != nil {
 log.Fatalf("❌ Error creando usuario: %v", err)
 }
 
-// Crear API key para demo
 rawKey, _, err := userMgr.CreateAPIKey(defaultUser.ID, "default-key", "")
 if err != nil {
 log.Fatalf("❌ Error creando API key: %v", err)
@@ -52,14 +50,16 @@ log.Printf("🔑 API key demo: %s", rawKey)
 
 limiter := ratelimit.NewLimiter(100, time.Minute)
 limits := gateway.NewLimitMiddleware(gateway.DefaultLimits())
-auth := gateway.NewAuthMiddleware(userMgr, false) // false = auth desactivado para demo
+auth := gateway.NewAuthMiddleware(userMgr, false)
+security := gateway.NewSecurityMiddleware(false) // false = desactivado para no bloquear demos
 
-// Pipeline de middlewares
+// Pipeline completo
 pipeline := gateway.NewPipeline().
 Use(gateway.ContextMiddleware()).
 Use(metrics.MetricsMiddleware).
 Use(limits.Handler).
 Use(auth.Handler).
+Use(security.Handler).
 Use(func(next http.Handler) http.Handler {
 return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 ip := r.RemoteAddr
@@ -73,7 +73,6 @@ next.ServeHTTP(w, r)
 
 mainHandler := pipeline.Then(p.Handler())
 
-// Router final
 finalRouter := mux.NewRouter()
 finalRouter.HandleFunc("/health", p.HealthCheck)
 finalRouter.PathPrefix("/dashboard").Handler(
@@ -109,7 +108,9 @@ log.Printf("🎨 Demo en http://localhost:%s/demo", *port)
 log.Printf("📈 Métricas en http://localhost:%s/metrics", *metricsPort)
 log.Printf("🔒 Rate Limiting: 100 req/min por IP")
 log.Printf("🚧 Request limits: 1MB body, 16KB headers")
-log.Printf("🔐 RBAC: organización + usuario + API key configurados")
+log.Printf("🔐 RBAC configurado")
+log.Printf("🛡️ Security scanners: disponibles (desactivados por defecto)")
+log.Printf("🔗 Pipeline: context → metrics → limits → auth → security → rate limit")
 if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 log.Fatalf("❌ Error: %v", err)
 }
