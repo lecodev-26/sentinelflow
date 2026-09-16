@@ -15,6 +15,7 @@ import (
 "github.com/lecodev-26/sentinelflow/internal/gateway"
 "github.com/lecodev-26/sentinelflow/internal/logger"
 "github.com/lecodev-26/sentinelflow/internal/metrics"
+"github.com/lecodev-26/sentinelflow/internal/observability"
 "github.com/lecodev-26/sentinelflow/internal/proxy"
 "github.com/lecodev-26/sentinelflow/internal/ratelimit"
 "github.com/lecodev-26/sentinelflow/internal/rbac"
@@ -27,6 +28,11 @@ configFile := flag.String("config", "configs/rules.yaml", "Archivo de configurac
 flag.Parse()
 
 log.Printf("🛡️ SentinelFlow iniciando en puerto %s", *port)
+
+// Inicializar tracing (vacío = no-op)
+if err := observability.InitTracing("sentinelflow", ""); err != nil {
+log.Printf("⚠️ Tracing no disponible: %v", err)
+}
 
 p, err := proxy.NewProxy(*configFile)
 if err != nil {
@@ -51,7 +57,7 @@ log.Printf("🔑 API key demo: %s", rawKey)
 
 // Cost tracker
 costTracker := cost.NewCostTracker()
-costTracker.SetBudget("default", 100.0) // $100/mes para el tenant default
+costTracker.SetBudget("default", 100.0)
 costTracker.SetAlertCallback(func(tenantID string, threshold int, budget *cost.Budget) {
 logger.Warnf("🚨 BUDGET ALERT: tenant=%s threshold=%d%% used=$%.2f/%.2f",
 tenantID, threshold, budget.Used, budget.MonthlyLimit)
@@ -66,10 +72,12 @@ cacheMw := gateway.NewCacheMiddleware(true, 5*time.Minute)
 quotaMw := gateway.NewQuotaMiddleware(true)
 quotaMw.SetQuota("default", gateway.DefaultQuota())
 costMw := gateway.NewCostMiddleware(costTracker, true)
+obsMw := gateway.NewObservabilityMiddleware(false)
 
 // Pipeline completo
 pipeline := gateway.NewPipeline().
 Use(gateway.ContextMiddleware()).
+Use(obsMw.Handler).
 Use(metrics.MetricsMiddleware).
 Use(limits.Handler).
 Use(auth.Handler).
@@ -122,8 +130,9 @@ log.Printf("✅ Proxy en http://localhost:%s", *port)
 log.Printf("📊 Dashboard en http://localhost:%s/dashboard", *port)
 log.Printf("🎨 Demo en http://localhost:%s/demo", *port)
 log.Printf("📈 Métricas en http://localhost:%s/metrics", *metricsPort)
-log.Printf("🔗 Pipeline: context → metrics → limits → auth → security → ratelimit → quota → cache → cost → engine")
+log.Printf("🔗 Pipeline completo: context → observability → metrics → limits → auth → security → ratelimit → quota → cache → cost → engine")
 log.Printf("💰 Budget: $100/mes para tenant 'default'")
+log.Printf("📊 Tracing: OpenTelemetry (no-op si no hay endpoint)")
 if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 log.Fatalf("❌ Error: %v", err)
 }
