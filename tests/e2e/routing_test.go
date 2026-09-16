@@ -3,14 +3,11 @@ package e2e
 import (
 "bytes"
 "encoding/json"
-"fmt"
 "net/http"
 "testing"
-"time"
 )
 
 func TestRouting(t *testing.T) {
-// Omitir si no hay proxy corriendo
 t.Skip("E2E tests require proxy running")
 
 url := "http://localhost:8080/v1/chat/completions"
@@ -18,7 +15,7 @@ url := "http://localhost:8080/v1/chat/completions"
 tests := []struct {
 name     string
 model    string
-expected string // proveedor esperado
+expected string
 }{
 {"GPT-3.5 → OpenAI", "gpt-3.5-turbo", "openai"},
 {"GPT-4 → OpenAI", "gpt-4", "openai"},
@@ -43,10 +40,8 @@ return
 }
 defer resp.Body.Close()
 
-// Verificar que el provider está en el header o respuesta
 provider := resp.Header.Get("X-Provider")
 if provider == "" {
-// Intentar extraer de la respuesta
 var respBody map[string]interface{}
 json.NewDecoder(resp.Body).Decode(&respBody)
 if p, ok := respBody["provider"].(string); ok {
@@ -54,7 +49,6 @@ provider = p
 }
 }
 
-// Si no hay provider, el test es informativo
 t.Logf("Provider: %s", provider)
 })
 }
@@ -65,7 +59,6 @@ t.Skip("E2E tests require proxy running")
 
 url := "http://localhost:8080/v1/chat/completions"
 
-// Simular que OpenAI falla (usando un modelo que no existe)
 body := map[string]interface{}{
 "model": "openai-fail",
 "messages": []map[string]string{
@@ -81,6 +74,5 @@ return
 }
 defer resp.Body.Close()
 
-// Debería fallar o hacer failover
 t.Logf("Status: %d", resp.StatusCode)
 }
