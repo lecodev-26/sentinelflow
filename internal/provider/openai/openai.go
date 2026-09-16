@@ -19,16 +19,19 @@ baseURL string
 client  *http.Client
 }
 
-func NewClient() *Client {
+// NewClient crea un cliente OpenAI.
+// Falla si no existe OPENAI_API_KEY: no hay dummy fallback.
+func NewClient() (*Client, error) {
 apiKey := os.Getenv("OPENAI_API_KEY")
 if apiKey == "" {
-apiKey = "sk-dummy-key"
+return nil, fmt.Errorf("OPENAI_API_KEY environment variable is required")
 }
+
 return &Client{
 apiKey:  apiKey,
 baseURL: "https://api.openai.com/v1",
 client:  &http.Client{Timeout: 30 * time.Second},
-}
+}, nil
 }
 
 func (c *Client) Name() string { return "openai" }
@@ -50,8 +53,8 @@ type openAIResponse struct {
 ID      string `json:"id"`
 Model   string `json:"model"`
 Choices []struct {
-Index        int `json:"index"`
-Message      struct {
+Index   int `json:"index"`
+Message struct {
 Role    string `json:"role"`
 Content string `json:"content"`
 } `json:"message"`
