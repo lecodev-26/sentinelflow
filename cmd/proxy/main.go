@@ -15,6 +15,7 @@ import (
 "github.com/lecodev-26/sentinelflow/internal/metrics"
 "github.com/lecodev-26/sentinelflow/internal/proxy"
 "github.com/lecodev-26/sentinelflow/internal/ratelimit"
+"github.com/lecodev-26/sentinelflow/internal/rbac"
 )
 
 func main() {
@@ -31,11 +32,29 @@ if err != nil {
 log.Fatalf("❌ Error creando proxy: %v", err)
 }
 
+// Configurar RBAC
+orgMgr := rbac.NewOrganizationManager()
+userMgr := rbac.NewUserManager(orgMgr)
+
+// Crear organización y usuario por defecto para demo
+defaultOrg := orgMgr.CreateOrganization("default", "Default Organization")
+defaultUser, err := userMgr.CreateUser("admin@local", "Admin", rbac.RoleAdmin, defaultOrg.ID)
+if err != nil {
+log.Fatalf("❌ Error creando usuario: %v", err)
+}
+
+// Crear API key para demo
+rawKey, _, err := userMgr.CreateAPIKey(defaultUser.ID, "default-key", "")
+if err != nil {
+log.Fatalf("❌ Error creando API key: %v", err)
+}
+log.Printf("🔑 API key demo: %s", rawKey)
+
 limiter := ratelimit.NewLimiter(100, time.Minute)
 limits := gateway.NewLimitMiddleware(gateway.DefaultLimits())
-auth := gateway.NewAuthMiddleware(false)
+auth := gateway.NewAuthMiddleware(userMgr, false) // false = auth desactivado para demo
 
-// Construir pipeline de middlewares
+// Pipeline de middlewares
 pipeline := gateway.NewPipeline().
 Use(gateway.ContextMiddleware()).
 Use(metrics.MetricsMiddleware).
@@ -52,29 +71,17 @@ next.ServeHTTP(w, r)
 })
 })
 
-// Handler principal
 mainHandler := pipeline.Then(p.Handler())
 
-r := mux.NewRouter()
-r.PathPrefix("/").Handler(mainHandler)
-
-// Rutas estáticas (no pasan por el pipeline)
-staticRouter := mux.NewRouter()
-staticRouter.HandleFunc("/health", p.HealthCheck)
-staticRouter.PathPrefix("/dashboard").Handler(
+// Router final
+finalRouter := mux.NewRouter()
+finalRouter.HandleFunc("/health", p.HealthCheck)
+finalRouter.PathPrefix("/dashboard").Handler(
 http.StripPrefix("/dashboard", http.FileServer(http.Dir("./web/dashboard"))),
 )
-staticRouter.PathPrefix("/demo").Handler(
+finalRouter.PathPrefix("/demo").Handler(
 http.StripPrefix("/demo", http.FileServer(http.Dir("./web/demo"))),
 )
-staticRouter.HandleFunc("/api/providers", p.GetProvidersStatus).Methods("GET")
-staticRouter.HandleFunc("/api/logs/stream", p.StreamLogs).Methods("GET")
-
-// Combinar: primero estáticos, luego pipeline
-finalRouter := mux.NewRouter()
-finalRouter.PathPrefix("/dashboard").Handler(staticRouter)
-finalRouter.PathPrefix("/demo").Handler(staticRouter)
-finalRouter.HandleFunc("/health", p.HealthCheck)
 finalRouter.HandleFunc("/api/providers", p.GetProvidersStatus).Methods("GET")
 finalRouter.HandleFunc("/api/logs/stream", p.StreamLogs).Methods("GET")
 finalRouter.PathPrefix("/").Handler(mainHandler)
@@ -100,9 +107,9 @@ log.Printf("✅ Proxy en http://localhost:%s", *port)
 log.Printf("📊 Dashboard en http://localhost:%s/dashboard", *port)
 log.Printf("🎨 Demo en http://localhost:%s/demo", *port)
 log.Printf("📈 Métricas en http://localhost:%s/metrics", *metricsPort)
-log.Printf("🔒 Rate Limiting activo: 100 req/min por IP")
+log.Printf("🔒 Rate Limiting: 100 req/min por IP")
 log.Printf("🚧 Request limits: 1MB body, 16KB headers")
-log.Printf("🔗 Pipeline: context → metrics → limits → auth → rate limit")
+log.Printf("🔐 RBAC: organización + usuario + API key configurados")
 if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 log.Fatalf("❌ Error: %v", err)
 }

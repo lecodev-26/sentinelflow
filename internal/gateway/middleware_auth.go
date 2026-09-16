@@ -2,18 +2,24 @@ package gateway
 
 import (
 "net/http"
+"strings"
 
 gwcontext "github.com/lecodev-26/sentinelflow/internal/gateway/context"
 "github.com/lecodev-26/sentinelflow/internal/logger"
+"github.com/lecodev-26/sentinelflow/internal/rbac"
 )
 
-// AuthMiddleware valida la API key y extrae la identidad
+// AuthMiddleware valida la API key usando el UserManager real
 type AuthMiddleware struct {
+userMgr *rbac.UserManager
 enabled bool
 }
 
-func NewAuthMiddleware(enabled bool) *AuthMiddleware {
-return &AuthMiddleware{enabled: enabled}
+func NewAuthMiddleware(userMgr *rbac.UserManager, enabled bool) *AuthMiddleware {
+return &AuthMiddleware{
+userMgr: userMgr,
+enabled: enabled,
+}
 }
 
 func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
@@ -24,28 +30,48 @@ WriteError(w, NewInternalError("missing request context", nil))
 return
 }
 
-if !m.enabled {
+if !m.enabled || m.userMgr == nil {
 // Auth desactivado → identidad por defecto
 rc.TenantID = "default"
 rc.UserID = "anonymous"
-rc.Role = "viewer"
+rc.Role = "admin"
 next.ServeHTTP(w, r)
 return
 }
 
-// Extraer API key del header
+// Extraer API key
 authHeader := r.Header.Get("Authorization")
 if authHeader == "" {
 WriteError(w, NewAuthenticationError("missing Authorization header"))
 return
 }
 
-// TODO: integrar con rbac.UserManager.ValidateAPIKey
-// Por ahora aceptamos cualquier Bearer como demo
-logger.Infof("🔐 Auth header presente para %s", rc.RequestID)
-rc.TenantID = "default"
-rc.UserID = "user"
-rc.Role = "admin"
+parts := strings.SplitN(authHeader, " ", 2)
+if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+WriteError(w, NewAuthenticationError("invalid Authorization format, expected 'Bearer <key>'"))
+return
+}
+
+rawKey := parts[1]
+
+// Validar contra el UserManager real
+apiKey, user, valid := m.userMgr.ValidateAPIKey(rawKey)
+if !valid {
+logger.Warnf("🔒 Auth fallida desde %s", rc.IP)
+WriteError(w, NewAuthenticationError("invalid or expired API key"))
+return
+}
+
+// Rellenar el RequestContext
+rc.APIKeyID = apiKey.ID
+rc.UserID = user.ID
+rc.TenantID = user.OrgID
+rc.Role = string(user.Role)
+if apiKey.ProjectID != "" {
+rc.ProjectID = apiKey.ProjectID
+}
+
+logger.Infof("✅ Auth OK: user=%s tenant=%s role=%s", user.ID, user.OrgID, user.Role)
 
 next.ServeHTTP(w, r)
 })
