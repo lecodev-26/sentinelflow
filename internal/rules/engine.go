@@ -5,19 +5,22 @@ import (
 "encoding/json"
 "fmt"
 "net/http"
+"time"
 
 "github.com/lecodev-26/sentinelflow/internal/config"
 "github.com/lecodev-26/sentinelflow/internal/logger"
 "github.com/lecodev-26/sentinelflow/internal/metrics"
 "github.com/lecodev-26/sentinelflow/internal/provider"
+"github.com/lecodev-26/sentinelflow/internal/provider/health"
 "github.com/lecodev-26/sentinelflow/internal/provider/registry"
 "github.com/lecodev-26/sentinelflow/internal/router"
 )
 
 type Engine struct {
-config   *config.Config
-registry *registry.Registry
-router   *router.ResilientRouter
+config       *config.Config
+registry     *registry.Registry
+router       *router.ResilientRouter
+healthMonitor *health.Monitor
 }
 
 func NewEngine(cfg *config.Config) *Engine {
@@ -35,14 +38,25 @@ reg.Register(adapter)
 logger.Infof("✅ Provider registrado: %s", p.Name)
 }
 
-// Crear ResilientRouter con circuit breaker
+// Crear circuit breaker router
 cbCfg := router.DefaultCBConfig()
 resilientRouter := router.NewResilientRouter(reg, cbCfg)
 
+// Crear health monitor
+healthMonitor := health.NewMonitor(30*time.Second, 5*time.Second)
+for _, p := range reg.GetAll() {
+healthMonitor.Register(p)
+}
+
+// Iniciar monitor en background
+healthMonitor.Start(context.Background())
+logger.Info("❤️ Health monitor iniciado")
+
 return &Engine{
-config:   cfg,
-registry: reg,
-router:   resilientRouter,
+config:        cfg,
+registry:      reg,
+router:        resilientRouter,
+healthMonitor: healthMonitor,
 }
 }
 
@@ -55,7 +69,6 @@ logger.Warnf("⚠️ No hay regla para %s %s", method, path)
 return nil, http.StatusNotFound, fmt.Errorf("no rule for %s %s", method, path)
 }
 
-// Parsear body
 var reqBody map[string]interface{}
 var model string
 if len(body) > 0 {
@@ -66,7 +79,6 @@ model = m
 }
 }
 
-// Construir ChatRequest normalizado
 messages := []provider.Message{}
 if msgs, ok := reqBody["messages"].([]interface{}); ok {
 for _, m := range msgs {
@@ -98,7 +110,6 @@ if stream, ok := reqBody["stream"].(bool); ok {
 chatReq.Stream = stream
 }
 
-// Ejecutar con ResilientRouter (incluye circuit breaker + fallback)
 ctx := context.Background()
 resp, err := e.router.Route(ctx, chatReq)
 if err != nil {
@@ -125,17 +136,26 @@ return map[string]interface{}{
 }
 }
 
+// GetProviderStatus devuelve el estado REAL de los providers
 func (e *Engine) GetProviderStatus() map[string]interface{} {
 status := make(map[string]interface{})
-for _, p := range e.registry.GetAll() {
-status[p.Name()] = map[string]interface{}{
-"status": "unknown",
+for _, h := range e.healthMonitor.GetAll() {
+status[h.Name] = map[string]interface{}{
+"status":            string(h.Status),
+"last_check":        h.LastCheck,
+"last_error":        h.LastError,
+"consecutive_fails": h.ConsecutiveFails,
+"latency_ms":        h.Latency.Milliseconds(),
 }
 }
 return status
 }
 
-// GetCircuitBreakerStatus devuelve el estado de los circuit breakers
 func (e *Engine) GetCircuitBreakerStatus() map[string]string {
 return e.router.GetCircuitBreakerStatus()
+}
+
+// Stop detiene el health monitor
+func (e *Engine) Stop() {
+e.healthMonitor.Stop()
 }
