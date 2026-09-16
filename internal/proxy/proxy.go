@@ -72,26 +72,20 @@ w.WriteHeader(http.StatusOK)
 json.NewEncoder(w).Encode(map[string]interface{}{
 "status":  "ok",
 "service": "sentinel-flow",
-"version": "0.2.0",
+"version": "0.3.0",
 "config": map[string]interface{}{
 "providers": len(p.config.Providers),
 "rules":     len(p.config.Rules),
 },
-"cache": p.engine.GetCacheStats(),
+"cache":     p.engine.GetCacheStats(),
+"providers": p.engine.GetProviderStatus(),
+"circuit_breakers": p.engine.GetCircuitBreakerStatus(),
 })
 }
 
 func (p *Proxy) GetProvidersStatus(w http.ResponseWriter, r *http.Request) {
-var status []map[string]interface{}
-for _, provider := range p.config.Providers {
-status = append(status, map[string]interface{}{
-"name":   provider.Name,
-"status": "online",
-"url":    provider.URL,
-})
-}
 w.Header().Set("Content-Type", "application/json")
-json.NewEncoder(w).Encode(status)
+json.NewEncoder(w).Encode(p.engine.GetProviderStatus())
 }
 
 func (p *Proxy) StreamLogs(w http.ResponseWriter, r *http.Request) {
@@ -123,4 +117,9 @@ case <-r.Context().Done():
 return
 }
 }
+}
+
+// Stop detiene el proxy y sus componentes
+func (p *Proxy) Stop() {
+p.engine.Stop()
 }

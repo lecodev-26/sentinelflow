@@ -11,6 +11,7 @@ import (
 "time"
 
 "github.com/gorilla/mux"
+"github.com/lecodev-26/sentinelflow/internal/gateway"
 "github.com/lecodev-26/sentinelflow/internal/metrics"
 "github.com/lecodev-26/sentinelflow/internal/proxy"
 "github.com/lecodev-26/sentinelflow/internal/ratelimit"
@@ -31,6 +32,7 @@ log.Fatalf("❌ Error creando proxy: %v", err)
 }
 
 limiter := ratelimit.NewLimiter(100, time.Minute)
+limits := gateway.NewLimitMiddleware(gateway.DefaultLimits())
 
 r := mux.NewRouter()
 
@@ -47,11 +49,15 @@ next.ServeHTTP(w, r)
 })
 })
 
-r.Handle("/", p.Handler())
+// ✅ CORREGIDO: usar p.Handler().ServeHTTP
+r.Handle("/", limits.Handler(p.Handler().ServeHTTP))
 r.HandleFunc("/health", p.HealthCheck)
 
 r.PathPrefix("/dashboard").Handler(
 http.StripPrefix("/dashboard", http.FileServer(http.Dir("./web/dashboard"))),
+)
+r.PathPrefix("/demo").Handler(
+http.StripPrefix("/demo", http.FileServer(http.Dir("./web/demo"))),
 )
 
 r.HandleFunc("/api/providers", p.GetProvidersStatus).Methods("GET")
@@ -76,8 +82,10 @@ signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 go func() {
 log.Printf("✅ Proxy en http://localhost:%s", *port)
 log.Printf("📊 Dashboard en http://localhost:%s/dashboard", *port)
+log.Printf("🎨 Demo en http://localhost:%s/demo", *port)
 log.Printf("📈 Métricas en http://localhost:%s/metrics", *metricsPort)
 log.Printf("🔒 Rate Limiting activo: 100 req/min por IP")
+log.Printf("🚧 Request limits: 1MB body, 16KB headers")
 if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 log.Fatalf("❌ Error: %v", err)
 }
@@ -97,6 +105,7 @@ defer cancel()
 
 srv.Shutdown(ctx)
 metricsSrv.Shutdown(ctx)
+p.Stop()
 
 log.Println("✅ SentinelFlow detenido correctamente")
 }
