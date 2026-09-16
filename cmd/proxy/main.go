@@ -32,7 +32,7 @@ if err != nil {
 log.Fatalf("❌ Error creando proxy: %v", err)
 }
 
-// Configurar RBAC
+// RBAC
 orgMgr := rbac.NewOrganizationManager()
 userMgr := rbac.NewUserManager(orgMgr)
 
@@ -48,10 +48,16 @@ log.Fatalf("❌ Error creando API key: %v", err)
 }
 log.Printf("🔑 API key demo: %s", rawKey)
 
+// Middlewares
 limiter := ratelimit.NewLimiter(100, time.Minute)
 limits := gateway.NewLimitMiddleware(gateway.DefaultLimits())
 auth := gateway.NewAuthMiddleware(userMgr, false)
-security := gateway.NewSecurityMiddleware(false) // false = desactivado para no bloquear demos
+security := gateway.NewSecurityMiddleware(false)
+cacheMw := gateway.NewCacheMiddleware(true, 5*time.Minute)
+quotaMw := gateway.NewQuotaMiddleware(true)
+
+// Configurar quota por defecto
+quotaMw.SetQuota("default", gateway.DefaultQuota())
 
 // Pipeline completo
 pipeline := gateway.NewPipeline().
@@ -62,14 +68,15 @@ Use(auth.Handler).
 Use(security.Handler).
 Use(func(next http.Handler) http.Handler {
 return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-ip := r.RemoteAddr
-if !limiter.Allow(ip) {
+if !limiter.Allow(r.RemoteAddr) {
 gateway.WriteError(w, gateway.NewRateLimitedError("too many requests"))
 return
 }
 next.ServeHTTP(w, r)
 })
-})
+}).
+Use(quotaMw.Handler).
+Use(cacheMw.Handler)
 
 mainHandler := pipeline.Then(p.Handler())
 
@@ -109,8 +116,10 @@ log.Printf("📈 Métricas en http://localhost:%s/metrics", *metricsPort)
 log.Printf("🔒 Rate Limiting: 100 req/min por IP")
 log.Printf("🚧 Request limits: 1MB body, 16KB headers")
 log.Printf("🔐 RBAC configurado")
-log.Printf("🛡️ Security scanners: disponibles (desactivados por defecto)")
-log.Printf("🔗 Pipeline: context → metrics → limits → auth → security → rate limit")
+log.Printf("🛡️ Security scanners: disponibles")
+log.Printf("💾 Cache: 5 min TTL")
+log.Printf("📊 Quota: 1000 req/min, 10M tokens/mes por tenant")
+log.Printf("🔗 Pipeline: context → metrics → limits → auth → security → ratelimit → quota → cache → engine")
 if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 log.Fatalf("❌ Error: %v", err)
 }
