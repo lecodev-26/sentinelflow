@@ -2,6 +2,7 @@ package gateway
 
 import (
 "net/http"
+"os"
 "strings"
 
 gwcontext "github.com/lecodev-26/sentinelflow/internal/gateway/context"
@@ -9,17 +10,54 @@ gwcontext "github.com/lecodev-26/sentinelflow/internal/gateway/context"
 "github.com/lecodev-26/sentinelflow/internal/rbac"
 )
 
+// Environment representa el entorno de ejecución
+type Environment string
+
+const (
+EnvDevelopment Environment = "development"
+EnvStaging     Environment = "staging"
+EnvProduction  Environment = "production"
+)
+
 // AuthMiddleware valida la API key usando el UserManager real
 type AuthMiddleware struct {
 userMgr *rbac.UserManager
-enabled bool
+mode    Environment
 }
 
-func NewAuthMiddleware(userMgr *rbac.UserManager, enabled bool) *AuthMiddleware {
+// NewAuthMiddleware crea el middleware en modo dev (auth opcional)
+func NewAuthMiddleware(userMgr *rbac.UserManager, mode Environment) *AuthMiddleware {
 return &AuthMiddleware{
 userMgr: userMgr,
-enabled: enabled,
+mode:    mode,
 }
+}
+
+// NewAuthMiddlewareFromEnv crea el middleware leyendo SENTINELFLOW_ENV
+func NewAuthMiddlewareFromEnv(userMgr *rbac.UserManager) (*AuthMiddleware, error) {
+env := os.Getenv("SENTINELFLOW_ENV")
+if env == "" {
+env = "development"
+}
+
+mode := Environment(env)
+
+// Validación: en producción no se permite auth desactivada
+if mode == EnvProduction && userMgr == nil {
+return nil, ErrProductionAuthRequired
+}
+
+return &AuthMiddleware{
+userMgr: userMgr,
+mode:    mode,
+}, nil
+}
+
+// ErrProductionAuthRequired se devuelve si producción no tiene auth configurada
+var ErrProductionAuthRequired = &GatewayError{
+Type:       ErrTypeInternal,
+Message:    "production environment requires auth to be enabled",
+StatusCode: http.StatusInternalServerError,
 }
 
 func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
@@ -30,16 +68,16 @@ WriteError(w, NewInternalError("missing request context", nil))
 return
 }
 
-if !m.enabled || m.userMgr == nil {
-// Auth desactivado → identidad por defecto
+// En desarrollo, si no hay userMgr, usar identidad por defecto
+if m.mode == EnvDevelopment && m.userMgr == nil {
 rc.TenantID = "default"
 rc.UserID = "anonymous"
-rc.Role = "admin"
+rc.Role = string(rbac.RoleAdmin)
 next.ServeHTTP(w, r)
 return
 }
 
-// Extraer API key
+// En staging/producción o con userMgr: validar API key
 authHeader := r.Header.Get("Authorization")
 if authHeader == "" {
 WriteError(w, NewAuthenticationError("missing Authorization header"))
@@ -54,7 +92,11 @@ return
 
 rawKey := parts[1]
 
-// Validar contra el UserManager real
+if m.userMgr == nil {
+WriteError(w, NewAuthenticationError("authentication not configured"))
+return
+}
+
 apiKey, user, valid := m.userMgr.ValidateAPIKey(rawKey)
 if !valid {
 logger.Warnf("🔒 Auth fallida desde %s", rc.IP)
@@ -62,7 +104,6 @@ WriteError(w, NewAuthenticationError("invalid or expired API key"))
 return
 }
 
-// Rellenar el RequestContext
 rc.APIKeyID = apiKey.ID
 rc.UserID = user.ID
 rc.TenantID = user.OrgID

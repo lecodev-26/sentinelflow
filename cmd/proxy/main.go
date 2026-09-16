@@ -22,7 +22,7 @@ import (
 "github.com/lecodev-26/sentinelflow/internal/rbac"
 )
 
-const Version = "1.0.0"
+const Version = "2.0.0"
 
 func main() {
 port := flag.String("port", "8080", "Puerto del proxy")
@@ -72,7 +72,12 @@ tenantID, threshold, budget.Used, budget.MonthlyLimit)
 // Middlewares
 limiter := ratelimit.NewLimiter(100, time.Minute)
 limits := gateway.NewLimitMiddleware(gateway.DefaultLimits())
-auth := gateway.NewAuthMiddleware(userMgr, false)
+
+auth, err := gateway.NewAuthMiddlewareFromEnv(userMgr)
+if err != nil {
+log.Fatalf("❌ Error configurando auth: %v", err)
+}
+
 security := gateway.NewSecurityMiddleware(false)
 cacheMw := gateway.NewCacheMiddleware(true, 5*time.Minute)
 quotaMw := gateway.NewQuotaMiddleware(true)
@@ -80,6 +85,7 @@ quotaMw.SetQuota("default", gateway.DefaultQuota())
 costMw := gateway.NewCostMiddleware(costTracker, true)
 obsMw := gateway.NewObservabilityMiddleware(false)
 
+// Pipeline completo
 pipeline := gateway.NewPipeline().
 Use(gateway.ContextMiddleware()).
 Use(obsMw.Handler).
