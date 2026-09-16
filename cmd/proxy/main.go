@@ -11,7 +11,9 @@ import (
 "time"
 
 "github.com/gorilla/mux"
+"github.com/lecodev-26/sentinelflow/internal/cost"
 "github.com/lecodev-26/sentinelflow/internal/gateway"
+"github.com/lecodev-26/sentinelflow/internal/logger"
 "github.com/lecodev-26/sentinelflow/internal/metrics"
 "github.com/lecodev-26/sentinelflow/internal/proxy"
 "github.com/lecodev-26/sentinelflow/internal/ratelimit"
@@ -25,7 +27,6 @@ configFile := flag.String("config", "configs/rules.yaml", "Archivo de configurac
 flag.Parse()
 
 log.Printf("🛡️ SentinelFlow iniciando en puerto %s", *port)
-log.Printf("📋 Configuración: %s", *configFile)
 
 p, err := proxy.NewProxy(*configFile)
 if err != nil {
@@ -48,6 +49,14 @@ log.Fatalf("❌ Error creando API key: %v", err)
 }
 log.Printf("🔑 API key demo: %s", rawKey)
 
+// Cost tracker
+costTracker := cost.NewCostTracker()
+costTracker.SetBudget("default", 100.0) // $100/mes para el tenant default
+costTracker.SetAlertCallback(func(tenantID string, threshold int, budget *cost.Budget) {
+logger.Warnf("🚨 BUDGET ALERT: tenant=%s threshold=%d%% used=$%.2f/%.2f",
+tenantID, threshold, budget.Used, budget.MonthlyLimit)
+})
+
 // Middlewares
 limiter := ratelimit.NewLimiter(100, time.Minute)
 limits := gateway.NewLimitMiddleware(gateway.DefaultLimits())
@@ -55,9 +64,8 @@ auth := gateway.NewAuthMiddleware(userMgr, false)
 security := gateway.NewSecurityMiddleware(false)
 cacheMw := gateway.NewCacheMiddleware(true, 5*time.Minute)
 quotaMw := gateway.NewQuotaMiddleware(true)
-
-// Configurar quota por defecto
 quotaMw.SetQuota("default", gateway.DefaultQuota())
+costMw := gateway.NewCostMiddleware(costTracker, true)
 
 // Pipeline completo
 pipeline := gateway.NewPipeline().
@@ -76,7 +84,8 @@ next.ServeHTTP(w, r)
 })
 }).
 Use(quotaMw.Handler).
-Use(cacheMw.Handler)
+Use(cacheMw.Handler).
+Use(costMw.Handler)
 
 mainHandler := pipeline.Then(p.Handler())
 
@@ -113,13 +122,8 @@ log.Printf("✅ Proxy en http://localhost:%s", *port)
 log.Printf("📊 Dashboard en http://localhost:%s/dashboard", *port)
 log.Printf("🎨 Demo en http://localhost:%s/demo", *port)
 log.Printf("📈 Métricas en http://localhost:%s/metrics", *metricsPort)
-log.Printf("🔒 Rate Limiting: 100 req/min por IP")
-log.Printf("🚧 Request limits: 1MB body, 16KB headers")
-log.Printf("🔐 RBAC configurado")
-log.Printf("🛡️ Security scanners: disponibles")
-log.Printf("💾 Cache: 5 min TTL")
-log.Printf("📊 Quota: 1000 req/min, 10M tokens/mes por tenant")
-log.Printf("🔗 Pipeline: context → metrics → limits → auth → security → ratelimit → quota → cache → engine")
+log.Printf("🔗 Pipeline: context → metrics → limits → auth → security → ratelimit → quota → cache → cost → engine")
+log.Printf("💰 Budget: $100/mes para tenant 'default'")
 if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 log.Fatalf("❌ Error: %v", err)
 }
