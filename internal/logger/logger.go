@@ -52,6 +52,12 @@ log.SetLevel(logrus.InfoLevel)
 return log
 }
 
+// WithFields devuelve una entrada con campos estructurados
+func WithFields(fields map[string]interface{}) *logrus.Entry {
+return Get().WithFields(logrus.Fields(fields))
+}
+
+// Funciones helper
 func Debug(args ...interface{}) {
 Get().Debug(args...)
 }
