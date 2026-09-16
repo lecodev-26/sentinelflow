@@ -33,39 +33,55 @@ log.Fatalf("❌ Error creando proxy: %v", err)
 
 limiter := ratelimit.NewLimiter(100, time.Minute)
 limits := gateway.NewLimitMiddleware(gateway.DefaultLimits())
+auth := gateway.NewAuthMiddleware(false)
 
-r := mux.NewRouter()
-
-r.Use(metrics.MetricsMiddleware)
-
-r.Use(func(next http.Handler) http.Handler {
+// Construir pipeline de middlewares
+pipeline := gateway.NewPipeline().
+Use(gateway.ContextMiddleware()).
+Use(metrics.MetricsMiddleware).
+Use(limits.Handler).
+Use(auth.Handler).
+Use(func(next http.Handler) http.Handler {
 return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 ip := r.RemoteAddr
 if !limiter.Allow(ip) {
-http.Error(w, "Too many requests", http.StatusTooManyRequests)
+gateway.WriteError(w, gateway.NewRateLimitedError("too many requests"))
 return
 }
 next.ServeHTTP(w, r)
 })
 })
 
-// ✅ CORREGIDO: usar p.Handler().ServeHTTP
-r.Handle("/", limits.Handler(p.Handler().ServeHTTP))
-r.HandleFunc("/health", p.HealthCheck)
+// Handler principal
+mainHandler := pipeline.Then(p.Handler())
 
-r.PathPrefix("/dashboard").Handler(
+r := mux.NewRouter()
+r.PathPrefix("/").Handler(mainHandler)
+
+// Rutas estáticas (no pasan por el pipeline)
+staticRouter := mux.NewRouter()
+staticRouter.HandleFunc("/health", p.HealthCheck)
+staticRouter.PathPrefix("/dashboard").Handler(
 http.StripPrefix("/dashboard", http.FileServer(http.Dir("./web/dashboard"))),
 )
-r.PathPrefix("/demo").Handler(
+staticRouter.PathPrefix("/demo").Handler(
 http.StripPrefix("/demo", http.FileServer(http.Dir("./web/demo"))),
 )
+staticRouter.HandleFunc("/api/providers", p.GetProvidersStatus).Methods("GET")
+staticRouter.HandleFunc("/api/logs/stream", p.StreamLogs).Methods("GET")
 
-r.HandleFunc("/api/providers", p.GetProvidersStatus).Methods("GET")
-r.HandleFunc("/api/logs/stream", p.StreamLogs).Methods("GET")
+// Combinar: primero estáticos, luego pipeline
+finalRouter := mux.NewRouter()
+finalRouter.PathPrefix("/dashboard").Handler(staticRouter)
+finalRouter.PathPrefix("/demo").Handler(staticRouter)
+finalRouter.HandleFunc("/health", p.HealthCheck)
+finalRouter.HandleFunc("/api/providers", p.GetProvidersStatus).Methods("GET")
+finalRouter.HandleFunc("/api/logs/stream", p.StreamLogs).Methods("GET")
+finalRouter.PathPrefix("/").Handler(mainHandler)
 
 srv := &http.Server{
 Addr:         ":" + *port,
-Handler:      r,
+Handler:      finalRouter,
 ReadTimeout:  30 * time.Second,
 WriteTimeout: 30 * time.Second,
 IdleTimeout:  60 * time.Second,
@@ -86,6 +102,7 @@ log.Printf("🎨 Demo en http://localhost:%s/demo", *port)
 log.Printf("📈 Métricas en http://localhost:%s/metrics", *metricsPort)
 log.Printf("🔒 Rate Limiting activo: 100 req/min por IP")
 log.Printf("🚧 Request limits: 1MB body, 16KB headers")
+log.Printf("🔗 Pipeline: context → metrics → limits → auth → rate limit")
 if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 log.Fatalf("❌ Error: %v", err)
 }
