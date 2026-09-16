@@ -48,7 +48,6 @@ next.ServeHTTP(recorder, r)
 
 // Solo registrar si fue exitoso
 if recorder.statusCode == http.StatusOK {
-// Extraer usage de la respuesta
 var respBody map[string]interface{}
 if err := json.Unmarshal(recorder.buffer.Bytes(), &respBody); err == nil {
 var inputTokens, outputTokens int
@@ -83,9 +82,9 @@ outputTokens,
 costUSD,
 )
 
-rc.Provider = provider
-rc.Tokens = inputTokens + outputTokens
-rc.Cost = costUSD
+rc.SetProvider(provider)
+rc.SetTokens(inputTokens, outputTokens, 0)
+rc.SetCost(costUSD)
 
 logger.Infof("💰 Coste registrado: tenant=%s provider=%s tokens=%d cost=$%.6f",
 rc.TenantID, provider, inputTokens+outputTokens, costUSD)

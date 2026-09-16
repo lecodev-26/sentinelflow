@@ -7,7 +7,6 @@ import (
 gwcontext "github.com/lecodev-26/sentinelflow/internal/gateway/context"
 "github.com/lecodev-26/sentinelflow/internal/logger"
 "github.com/lecodev-26/sentinelflow/internal/observability"
-"go.opentelemetry.io/otel/attribute"
 "go.opentelemetry.io/otel/codes"
 )
 
@@ -42,7 +41,6 @@ span.SetAttribute("method", r.Method)
 span.SetAttribute("path", r.URL.Path)
 span.SetAttribute("model", rc.Model)
 
-// Añadir span al contexto
 r = r.WithContext(span.Context())
 }
 
@@ -65,8 +63,8 @@ if span != nil {
 span.SetAttribute("status_code", recorder.statusCode)
 span.SetAttribute("latency_ms", latency.Milliseconds())
 span.SetAttribute("provider", rc.Provider)
-span.SetAttribute("tokens", rc.Tokens)
-span.SetAttribute("cost_usd", rc.Cost)
+span.SetAttribute("tokens", rc.TotalTokens)
+span.SetAttribute("cost_usd", rc.ActualCost)
 span.SetAttribute("cache_hit", rc.CacheHit)
 
 if recorder.statusCode >= 500 {
@@ -77,24 +75,23 @@ span.SetStatus(codes.Ok, "")
 }
 
 // Log estructurado SIN PII
-fields := map[string]interface{}{
-"request_id":  rc.RequestID,
-"trace_id":    rc.TraceID,
-"tenant_id":   rc.TenantID,
-"user_id":     rc.UserID,
-"method":      r.Method,
-"path":        r.URL.Path,
-"status":      recorder.statusCode,
-"latency_ms":  latency.Milliseconds(),
-"provider":    rc.Provider,
-"model":       rc.Model,
-"tokens":      rc.Tokens,
-"cost_usd":    rc.Cost,
-"cache_hit":   rc.CacheHit,
-"ip":          rc.IP,
-}
-
-logger.WithFields(fields).Info("gateway request completed")
+logger.WithFields(logger.Get().WithFields(nil).Data).Info("")
+logger.WithFields(map[string]interface{}{
+"request_id": rc.RequestID,
+"trace_id":   rc.TraceID,
+"tenant_id":  rc.TenantID,
+"user_id":    rc.UserID,
+"method":     r.Method,
+"path":       r.URL.Path,
+"status":     recorder.statusCode,
+"latency_ms": latency.Milliseconds(),
+"provider":   rc.Provider,
+"model":      rc.Model,
+"tokens":     rc.TotalTokens,
+"cost_usd":   rc.ActualCost,
+"cache_hit":  rc.CacheHit,
+"ip":         rc.IP,
+}).Info("gateway request completed")
 })
 }
 
@@ -107,6 +104,3 @@ func (r *obsRecorder) WriteHeader(code int) {
 r.statusCode = code
 r.ResponseWriter.WriteHeader(code)
 }
-
-// Asegurarse de que attribute está importado correctamente
-var _ = attribute.String
