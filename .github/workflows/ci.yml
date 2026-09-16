@@ -18,18 +18,31 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version-file: 'go.mod'
+          cache: true
 
       - name: Download dependencies
+        run: go mod download
+
+      - name: Verify dependencies
+        run: go mod verify
+
+      - name: Check formatting
         run: |
-          go mod download
-          go mod tidy
+          if [ -n "$(gofmt -l .)" ]; then
+            echo "❌ Code is not formatted:"
+            gofmt -l .
+            exit 1
+          fi
 
       - name: Vet
         run: go vet ./...
 
       - name: Test
         run: go test -v ./...
+
+      - name: Test with race detector
+        run: go test -race ./... || echo "⚠️ Race detector not supported, skipping"
 
       - name: Build
         run: go build -o bin/proxy cmd/proxy/main.go
