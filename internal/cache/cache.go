@@ -47,8 +47,8 @@ return value, true
 }
 }
 
-c.mu.RLock()
-defer c.mu.RUnlock()
+c.mu.Lock()
+defer c.mu.Unlock()
 
 item, exists := c.items[key]
 if !exists {
@@ -104,7 +104,6 @@ return len(c.items)
 func (c *Cache) CleanExpired() {
 c.mu.Lock()
 defer c.mu.Unlock()
-
 for key, item := range c.items {
 if item.IsExpired() {
 delete(c.items, key)

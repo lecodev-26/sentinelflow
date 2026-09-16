@@ -1,27 +1,28 @@
 package rbac
 
 import (
+"crypto/rand"
+"crypto/sha256"
+"encoding/hex"
 "sync"
 "time"
 )
 
-// User representa un usuario
 type User struct {
-ID          string    `json:"id"`
-Email       string    `json:"email"`
-Name        string    `json:"name"`
-Role        Role      `json:"role"`
-OrgID       string    `json:"org_id"`
-CreatedAt   time.Time `json:"created_at"`
-UpdatedAt   time.Time `json:"updated_at"`
-APIKeys     []string  `json:"api_keys"`
-Active      bool      `json:"active"`
+ID        string    `json:"id"`
+Email     string    `json:"email"`
+Name      string    `json:"name"`
+Role      Role      `json:"role"`
+OrgID     string    `json:"org_id"`
+CreatedAt time.Time `json:"created_at"`
+UpdatedAt time.Time `json:"updated_at"`
+APIKeys   []string  `json:"api_keys"`
+Active    bool      `json:"active"`
 }
 
-// APIKey representa una clave de API
 type APIKey struct {
 ID        string    `json:"id"`
-Key       string    `json:"key"`
+KeyHash   string    `json:"-"`
 Name      string    `json:"name"`
 UserID    string    `json:"user_id"`
 OrgID     string    `json:"org_id"`
@@ -32,7 +33,6 @@ ExpiresAt time.Time `json:"expires_at"`
 Active    bool      `json:"active"`
 }
 
-// UserManager gestiona usuarios y API keys
 type UserManager struct {
 mu      sync.RWMutex
 users   map[string]*User
@@ -40,7 +40,6 @@ apiKeys map[string]*APIKey
 orgMgr  *OrganizationManager
 }
 
-// NewUserManager crea un nuevo manager de usuarios
 func NewUserManager(orgMgr *OrganizationManager) *UserManager {
 return &UserManager{
 users:   make(map[string]*User),
@@ -49,12 +48,10 @@ orgMgr:  orgMgr,
 }
 }
 
-// CreateUser crea un nuevo usuario
 func (m *UserManager) CreateUser(email, name string, role Role, orgID string) (*User, error) {
 m.mu.Lock()
 defer m.mu.Unlock()
 
-// Verificar que la organización existe
 if _, exists := m.orgMgr.GetOrganization(orgID); !exists {
 return nil, ErrOrganizationNotFound
 }
@@ -71,14 +68,10 @@ APIKeys:   []string{},
 Active:    true,
 }
 m.users[user.ID] = user
-
-// Añadir a la organización
 _ = m.orgMgr.AddMember(orgID, user.ID, role)
-
 return user, nil
 }
 
-// GetUser devuelve un usuario por ID
 func (m *UserManager) GetUser(id string) (*User, bool) {
 m.mu.RLock()
 defer m.mu.RUnlock()
@@ -86,7 +79,6 @@ user, exists := m.users[id]
 return user, exists
 }
 
-// GetUserByEmail devuelve un usuario por email
 func (m *UserManager) GetUserByEmail(email string) (*User, bool) {
 m.mu.RLock()
 defer m.mu.RUnlock()
@@ -98,88 +90,92 @@ return user, true
 return nil, false
 }
 
-// CreateAPIKey crea una nueva API key para un usuario
-func (m *UserManager) CreateAPIKey(userID, name, projectID string) (*APIKey, error) {
+func (m *UserManager) CreateAPIKey(userID, name, projectID string) (string, *APIKey, error) {
 m.mu.Lock()
 defer m.mu.Unlock()
 
 user, exists := m.users[userID]
 if !exists {
-return nil, ErrUserNotFound
+return "", nil, ErrUserNotFound
 }
 
-// Verificar que el proyecto existe
 if projectID != "" {
 if _, exists := m.orgMgr.GetProject(projectID); !exists {
-return nil, ErrProjectNotFound
+return "", nil, ErrProjectNotFound
 }
 }
 
-key := generateAPIKey()
+rawKey := generateAPIKey()
+hash := hashKey(rawKey)
+
 apiKey := &APIKey{
 ID:        generateID("apikey"),
-Key:       key,
+KeyHash:   hash,
 Name:      name,
 UserID:    userID,
 OrgID:     user.OrgID,
 ProjectID: projectID,
 CreatedAt: time.Now(),
 LastUsed:  time.Now(),
-ExpiresAt: time.Now().Add(365 * 24 * time.Hour), // 1 año
+ExpiresAt: time.Now().Add(365 * 24 * time.Hour),
 Active:    true,
 }
-m.apiKeys[key] = apiKey
+m.apiKeys[hash] = apiKey
 user.APIKeys = append(user.APIKeys, apiKey.ID)
 user.UpdatedAt = time.Now()
 
-return apiKey, nil
+return rawKey, apiKey, nil
 }
 
-// ValidateAPIKey valida una API key
-func (m *UserManager) ValidateAPIKey(key string) (*APIKey, *User, bool) {
+func (m *UserManager) ValidateAPIKey(rawKey string) (*APIKey, *User, bool) {
+hash := hashKey(rawKey)
+
 m.mu.RLock()
-defer m.mu.RUnlock()
-
-apiKey, exists := m.apiKeys[key]
+apiKey, exists := m.apiKeys[hash]
 if !exists {
+m.mu.RUnlock()
+return nil, nil, false
+}
+user, userExists := m.users[apiKey.UserID]
+valid := apiKey.Active &&
+!time.Now().After(apiKey.ExpiresAt) &&
+userExists &&
+user.Active
+m.mu.RUnlock()
+
+if !valid {
 return nil, nil, false
 }
 
-if !apiKey.Active {
-return nil, nil, false
-}
-
-if time.Now().After(apiKey.ExpiresAt) {
-return nil, nil, false
-}
-
-user, exists := m.users[apiKey.UserID]
-if !exists {
-return nil, nil, false
-}
-
-if !user.Active {
-return nil, nil, false
-}
-
+m.mu.Lock()
 apiKey.LastUsed = time.Now()
+m.mu.Unlock()
+
 return apiKey, user, true
 }
 
-// RevokeAPIKey revoca una API key
-func (m *UserManager) RevokeAPIKey(key string) bool {
+func (m *UserManager) RevokeAPIKey(rawKey string) bool {
+hash := hashKey(rawKey)
 m.mu.Lock()
 defer m.mu.Unlock()
 
-apiKey, exists := m.apiKeys[key]
+apiKey, exists := m.apiKeys[hash]
 if !exists {
 return false
 }
-
 apiKey.Active = false
 return true
 }
 
+func hashKey(key string) string {
+sum := sha256.Sum256([]byte(key))
+return hex.EncodeToString(sum[:])
+}
+
 func generateAPIKey() string {
-return "sf_" + randomString(32)
+b := make([]byte, 32)
+if _, err := rand.Read(b); err != nil {
+panic("crypto/rand failed: " + err.Error())
+}
+return "sf_" + hex.EncodeToString(b)
 }
