@@ -53,34 +53,23 @@ body {
   min-height: 100vh;
   transition: background 0.3s, color 0.3s;
   overflow-x: hidden;
-  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
 }
 
-/* Fondo con gradiente sutil */
 body::before {
   content: '';
   position: fixed;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
+  top: -50%; left: -50%;
+  width: 200%; height: 200%;
   background: radial-gradient(circle at 20% 20%, rgba(102, 126, 234, 0.08) 0%, transparent 40%),
               radial-gradient(circle at 80% 80%, rgba(118, 75, 162, 0.08) 0%, transparent 40%);
   z-index: -1;
   pointer-events: none;
 }
 
-.container {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 24px;
-}
+.container { max-width: 1400px; margin: 0 auto; padding: 24px; }
 
-/* Header */
 .header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  display: flex; justify-content: space-between; align-items: center;
   padding: 16px 24px;
   background: var(--surface);
   backdrop-filter: blur(var(--glass-blur));
@@ -91,54 +80,34 @@ body::before {
   box-shadow: var(--shadow);
 }
 
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
+.logo { display: flex; align-items: center; gap: 12px; }
 
 .logo-icon {
-  width: 36px;
-  height: 36px;
+  width: 36px; height: 36px;
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
   border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: flex; align-items: center; justify-content: center;
   font-size: 18px;
   box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
 }
 
-.logo-text {
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-
+.logo-text { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
 .logo-text span { color: var(--text-dim); font-weight: 400; }
 
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
+.header-actions { display: flex; align-items: center; gap: 12px; }
 
 .status-pill {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: flex; align-items: center; gap: 8px;
   padding: 6px 14px;
   background: rgba(0, 217, 163, 0.1);
   border: 1px solid rgba(0, 217, 163, 0.2);
   border-radius: 20px;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 12px; font-weight: 500;
   color: var(--green);
 }
 
 .status-dot {
-  width: 6px;
-  height: 6px;
+  width: 6px; height: 6px;
   background: var(--green);
   border-radius: 50%;
   animation: pulse 2s infinite;
@@ -150,27 +119,19 @@ body::before {
 }
 
 .icon-btn {
-  width: 36px;
-  height: 36px;
+  width: 36px; height: 36px;
   border-radius: 10px;
   background: transparent;
   border: 1px solid var(--border);
   color: var(--text-dim);
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: flex; align-items: center; justify-content: center;
   transition: all 0.2s;
   font-size: 16px;
 }
 
-.icon-btn:hover {
-  background: var(--surface-solid);
-  border-color: var(--border-strong);
-  color: var(--text);
-}
+.icon-btn:hover { background: var(--surface-solid); border-color: var(--border-strong); color: var(--text); }
 
-/* Grid principal */
 .grid-main {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -186,18 +147,12 @@ body::before {
   border-radius: var(--radius);
   padding: 20px;
   transition: all 0.3s;
-  position: relative;
-  overflow: hidden;
 }
 
-.metric-card:hover {
-  border-color: var(--border-strong);
-  transform: translateY(-2px);
-}
+.metric-card:hover { border-color: var(--border-strong); transform: translateY(-2px); }
 
 .metric-label {
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 11px; font-weight: 500;
   color: var(--text-mute);
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -206,26 +161,21 @@ body::before {
 
 .metric-value {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 28px;
-  font-weight: 600;
+  font-size: 28px; font-weight: 600;
   letter-spacing: -0.02em;
   color: var(--text);
   font-variant-numeric: tabular-nums;
 }
 
 .metric-trend {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  font-weight: 500;
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12px; font-weight: 500;
   margin-top: 6px;
 }
 
 .metric-trend.up { color: var(--green); }
 .metric-trend.down { color: var(--red); }
 
-/* Grid secundario */
 .grid-two {
   display: grid;
   grid-template-columns: 2fr 1fr;
@@ -244,27 +194,13 @@ body::before {
 }
 
 .panel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  display: flex; justify-content: space-between; align-items: center;
   margin-bottom: 20px;
 }
 
-.panel-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
+.panel-title { font-size: 14px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 8px; }
+.panel-subtitle { font-size: 12px; color: var(--text-mute); }
 
-.panel-subtitle {
-  font-size: 12px;
-  color: var(--text-mute);
-}
-
-/* Providers */
 .provider-row {
   display: grid;
   grid-template-columns: 2fr 1fr 1fr 1.2fr;
@@ -276,38 +212,17 @@ body::before {
 
 .provider-row:last-child { border-bottom: none; }
 
-.provider-name {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-weight: 500;
-}
+.provider-name { display: flex; align-items: center; gap: 10px; font-weight: 500; }
 
-.provider-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
+.provider-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .provider-dot.healthy { background: var(--green); box-shadow: 0 0 8px rgba(0, 217, 163, 0.5); }
 .provider-dot.degraded { background: var(--orange); box-shadow: 0 0 8px rgba(255, 184, 77, 0.5); }
 .provider-dot.unhealthy { background: var(--red); box-shadow: 0 0 8px rgba(255, 107, 122, 0.5); }
 .provider-dot.unknown { background: var(--text-mute); }
 
-.provider-stat {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  color: var(--text-dim);
-  font-variant-numeric: tabular-nums;
-}
+.provider-stat { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
 
-/* Security */
-.security-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
+.security-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
 .security-item {
   padding: 16px;
@@ -317,14 +232,10 @@ body::before {
   transition: all 0.2s;
 }
 
-.security-item:hover {
-  background: rgba(255, 107, 122, 0.08);
-  transform: translateY(-2px);
-}
+.security-item:hover { background: rgba(255, 107, 122, 0.08); transform: translateY(-2px); }
 
 .security-item .label {
-  font-size: 11px;
-  color: var(--text-mute);
+  font-size: 11px; color: var(--text-mute);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   margin-bottom: 6px;
@@ -332,70 +243,33 @@ body::before {
 
 .security-item .value {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 22px;
-  font-weight: 600;
+  font-size: 22px; font-weight: 600;
   color: var(--red);
 }
 
-/* Routing timeline */
-.routing-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
+.routing-list { display: flex; flex-direction: column; gap: 8px; }
 
 .routing-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  display: flex; align-items: center; gap: 12px;
   padding: 10px 12px;
   background: rgba(255, 255, 255, 0.02);
   border-radius: var(--radius-sm);
   font-size: 12px;
-  transition: all 0.2s;
   border-left: 2px solid var(--accent);
 }
 
-.routing-item:hover { background: rgba(102, 126, 234, 0.08); }
-
-.routing-time {
-  font-family: 'JetBrains Mono', monospace;
-  color: var(--text-mute);
-  font-size: 11px;
-  min-width: 60px;
-}
-
+.routing-time { font-family: 'JetBrains Mono', monospace; color: var(--text-mute); font-size: 11px; min-width: 60px; }
 .routing-provider { color: var(--accent); font-weight: 600; }
 .routing-arrow { color: var(--text-mute); }
 .routing-model { color: var(--text-dim); }
-.routing-status { margin-left: auto; }
 
-/* Gráficos */
-.chart-container {
-  position: relative;
-  height: 240px;
-}
+.chart-container { position: relative; height: 240px; }
 
-/* Logs */
-.logs-container {
-  max-height: 220px;
-  overflow-y: auto;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  line-height: 1.7;
-}
-
+.logs-container { max-height: 220px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 11px; line-height: 1.7; }
 .logs-container::-webkit-scrollbar { width: 4px; }
-.logs-container::-webkit-scrollbar-track { background: transparent; }
 .logs-container::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
 
-.log-entry {
-  display: flex;
-  gap: 10px;
-  padding: 3px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.02);
-}
-
+.log-entry { display: flex; gap: 10px; padding: 3px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.02); }
 .log-time { color: var(--text-mute); min-width: 60px; }
 .log-level { font-weight: 600; min-width: 50px; }
 .log-level.info { color: var(--accent); }
@@ -403,10 +277,8 @@ body::before {
 .log-level.error { color: var(--red); }
 .log-msg { color: var(--text-dim); }
 
-/* Command palette */
 .cmd-overlay {
-  position: fixed;
-  inset: 0;
+  position: fixed; inset: 0;
   background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(8px);
   display: none;
@@ -419,8 +291,7 @@ body::before {
 .cmd-overlay.active { display: flex; }
 
 .cmd-palette {
-  width: 100%;
-  max-width: 560px;
+  width: 100%; max-width: 560px;
   background: var(--surface-solid);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
@@ -454,20 +325,16 @@ body::before {
   padding: 12px 16px;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  display: flex; align-items: center; gap: 12px;
   font-size: 13px;
   color: var(--text-dim);
   transition: all 0.15s;
 }
 
-.cmd-item:hover, .cmd-item.selected {
-  background: rgba(102, 126, 234, 0.15);
-  color: var(--text);
-}
+.cmd-item:hover, .cmd-item.selected { background: rgba(102, 126, 234, 0.15); color: var(--text); }
 
 .cmd-item .icon { font-size: 16px; width: 20px; text-align: center; }
+
 .cmd-item .shortcut {
   margin-left: auto;
   font-family: 'JetBrains Mono', monospace;
@@ -478,7 +345,6 @@ body::before {
   border-radius: 4px;
 }
 
-/* Kbd */
 kbd {
   font-family: 'JetBrains Mono', monospace;
   font-size: 10px;
@@ -489,7 +355,6 @@ kbd {
   color: var(--text-dim);
 }
 
-/* Responsive */
 @media (max-width: 1024px) {
   .grid-main { grid-template-columns: repeat(2, 1fr); }
   .grid-two { grid-template-columns: 1fr; }
@@ -503,10 +368,7 @@ kbd {
   .metric-value { font-size: 22px; }
 }
 
-/* Fade in */
-.fade-in {
-  animation: fadeIn 0.4s ease-out;
-}
+.fade-in { animation: fadeIn 0.4s ease-out; }
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(4px); }
@@ -518,52 +380,49 @@ kbd {
 
 <div class="container">
 
-  <!-- HEADER -->
   <header class="header fade-in">
     <div class="logo">
       <div class="logo-icon">🛡️</div>
       <div class="logo-text">Sentinel<span>Flow</span></div>
     </div>
     <div class="header-actions">
-      <span class="status-pill">
+      <span class="status-pill" id="statusPill">
         <span class="status-dot"></span>
-        Operativo
+        <span id="statusText">Conectando...</span>
       </span>
       <button class="icon-btn" onclick="openCommandPalette()" title="Buscar (Ctrl+K)">🔍</button>
       <button class="icon-btn" onclick="toggleTheme()" id="themeBtn" title="Cambiar tema">🌙</button>
     </div>
   </header>
 
-  <!-- MÉTRICAS PRINCIPALES -->
   <div class="grid-main fade-in">
     <div class="metric-card">
       <div class="metric-label">Requests</div>
-      <div class="metric-value" id="mRequests">1.82M</div>
-      <div class="metric-trend up">▲ 12.4%</div>
+      <div class="metric-value" id="mRequests">-</div>
+      <div class="metric-trend" id="trendRequests">-</div>
     </div>
     <div class="metric-card">
-      <div class="metric-label">Coste (30d)</div>
-      <div class="metric-value" id="mCost">$483.20</div>
-      <div class="metric-trend up">▲ 8.1%</div>
+      <div class="metric-label">Coste</div>
+      <div class="metric-value" id="mCost">-</div>
+      <div class="metric-trend" id="trendCost">-</div>
     </div>
     <div class="metric-card">
       <div class="metric-label">Latencia P95</div>
-      <div class="metric-value" id="mLatency">420ms</div>
-      <div class="metric-trend down">▼ 5.2%</div>
+      <div class="metric-value" id="mLatency">-</div>
+      <div class="metric-trend" id="trendLatency">-</div>
     </div>
     <div class="metric-card">
       <div class="metric-label">Tasa de Error</div>
-      <div class="metric-value" id="mErrors">0.18%</div>
-      <div class="metric-trend down">▼ 2.1%</div>
+      <div class="metric-value" id="mErrors">-</div>
+      <div class="metric-trend" id="trendErrors">-</div>
     </div>
   </div>
 
-  <!-- GRÁFICOS -->
   <div class="grid-two fade-in">
     <div class="panel">
       <div class="panel-header">
         <div class="panel-title">📈 Requests (últimas 24h)</div>
-        <div class="panel-subtitle">actualizado hace 2s</div>
+        <div class="panel-subtitle" id="lastUpdate">-</div>
       </div>
       <div class="chart-container">
         <canvas id="requestsChart"></canvas>
@@ -579,91 +438,53 @@ kbd {
     </div>
   </div>
 
-  <!-- PROVIDERS -->
   <div class="panel fade-in" style="margin-bottom: 24px;">
     <div class="panel-header">
       <div class="panel-title">🔌 Providers</div>
-      <div class="panel-subtitle" id="providersCount">3 activos</div>
+      <div class="panel-subtitle" id="providersCount">-</div>
     </div>
     <div id="providersList">
-      <div class="provider-row">
-        <div class="provider-name"><span class="provider-dot healthy"></span>OpenAI</div>
-        <div class="provider-stat">99.97%</div>
-        <div class="provider-stat">120ms</div>
-        <div class="provider-stat">$0.0021/req</div>
-      </div>
-      <div class="provider-row">
-        <div class="provider-name"><span class="provider-dot healthy"></span>Anthropic</div>
-        <div class="provider-stat">99.99%</div>
-        <div class="provider-stat">85ms</div>
-        <div class="provider-stat">$0.0018/req</div>
-      </div>
-      <div class="provider-row">
-        <div class="provider-name"><span class="provider-dot degraded"></span>Local Llama</div>
-        <div class="provider-stat">98.21%</div>
-        <div class="provider-stat">420ms</div>
-        <div class="provider-stat">$0.0000/req</div>
-      </div>
+      <div class="provider-row"><div class="provider-stat">Cargando...</div></div>
     </div>
   </div>
 
-  <!-- SEGURIDAD + ROUTING -->
   <div class="grid-two fade-in">
     <div class="panel">
       <div class="panel-header">
         <div class="panel-title">🛡️ Seguridad (24h)</div>
-        <div class="panel-subtitle">3 eventos activos</div>
       </div>
       <div class="security-grid">
         <div class="security-item">
           <div class="label">PII bloqueado</div>
-          <div class="value">142</div>
+          <div class="value" id="secPII">0</div>
         </div>
         <div class="security-item">
-          <div class="label">Secretos detectados</div>
-          <div class="value">18</div>
+          <div class="label">Secretos</div>
+          <div class="value" id="secSecrets">0</div>
         </div>
         <div class="security-item">
           <div class="label">Prompt injection</div>
-          <div class="value">39</div>
+          <div class="value" id="secInjection">0</div>
         </div>
         <div class="security-item">
           <div class="label">Requests bloqueadas</div>
-          <div class="value">7</div>
+          <div class="value" id="secBlocked">0</div>
         </div>
       </div>
     </div>
     <div class="panel">
       <div class="panel-header">
-        <div class="panel-title">🎯 Decisiones de Routing</div>
+        <div class="panel-title">⚙️ Sistema</div>
       </div>
-      <div class="routing-list" id="routingList">
+      <div class="routing-list" id="systemList">
         <div class="routing-item">
-          <span class="routing-time">12:34:02</span>
-          <span class="routing-provider">openai</span>
-          <span class="routing-arrow">→</span>
-          <span class="routing-model">gpt-4</span>
-          <span class="routing-status">✅</span>
-        </div>
-        <div class="routing-item">
-          <span class="routing-time">12:34:01</span>
-          <span class="routing-provider">anthropic</span>
-          <span class="routing-arrow">→</span>
-          <span class="routing-model">claude-3</span>
-          <span class="routing-status">✅</span>
-        </div>
-        <div class="routing-item">
-          <span class="routing-time">12:33:58</span>
-          <span class="routing-provider">local</span>
-          <span class="routing-arrow">→</span>
-          <span class="routing-model">llama3</span>
-          <span class="routing-status">⚠️</span>
+          <span class="routing-time">--</span>
+          <span class="routing-model">Cargando...</span>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- LOGS -->
   <div class="panel fade-in">
     <div class="panel-header">
       <div class="panel-title">📋 Logs en vivo</div>
@@ -673,44 +494,34 @@ kbd {
     </div>
     <div class="logs-container" id="logsList">
       <div class="log-entry">
-        <span class="log-time">12:34:02</span>
+        <span class="log-time">--:--:--</span>
         <span class="log-level info">[INFO]</span>
-        <span class="log-msg">Provider openai seleccionado para gpt-4</span>
-      </div>
-      <div class="log-entry">
-        <span class="log-time">12:34:01</span>
-        <span class="log-level info">[INFO]</span>
-        <span class="log-msg">Cache MISS: v1:default::gpt-4:fp_3a2f</span>
-      </div>
-      <div class="log-entry">
-        <span class="log-time">12:33:58</span>
-        <span class="log-level warn">[WARN]</span>
-        <span class="log-msg">Provider local degradado: latencia 420ms</span>
-      </div>
-      <div class="log-entry">
-        <span class="log-time">12:33:45</span>
-        <span class="log-level info">[INFO]</span>
-        <span class="log-msg">Circuit breaker openai → closed (2 éxitos)</span>
+        <span class="log-msg">Esperando conexión...</span>
       </div>
     </div>
   </div>
 
 </div>
 
-<!-- COMMAND PALETTE -->
 <div class="cmd-overlay" id="cmdOverlay" onclick="closeCommandPalette(event)">
   <div class="cmd-palette" onclick="event.stopPropagation()">
-    <input type="text" class="cmd-input" id="cmdInput" placeholder="Buscar acciones, providers, tenants..." autocomplete="off">
+    <input type="text" class="cmd-input" id="cmdInput" placeholder="Buscar acciones..." autocomplete="off">
     <div class="cmd-list" id="cmdList"></div>
   </div>
 </div>
 
 <script>
-// ==================== ESTADO ====================
+// ==================== CONFIG ====================
+const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? `http://${window.location.hostname}:8081`
+  : `http://${window.location.hostname}:8081`;
+
 const state = {
   theme: localStorage.getItem('sf-theme') || 'dark',
   requestsChart: null,
   costChart: null,
+  refreshInterval: null,
+  connected: false,
 };
 
 // ==================== TEMA ====================
@@ -722,11 +533,150 @@ function toggleTheme() {
   updateChartColors();
 }
 
-// Inicializar tema
 document.documentElement.setAttribute('data-theme', state.theme);
 document.getElementById('themeBtn').textContent = state.theme === 'dark' ? '🌙' : '☀️';
 
-// ==================== GRÁFICOS ====================
+// ==================== API ====================
+async function fetchJSON(path) {
+  try {
+    const resp = await fetch(`${API_BASE}${path}`);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    state.connected = true;
+    return await resp.json();
+  } catch (e) {
+    state.connected = false;
+    console.error(`Fetch error ${path}:`, e.message);
+    return null;
+  }
+}
+
+function updateConnectionStatus() {
+  const pill = document.getElementById('statusPill');
+  const text = document.getElementById('statusText');
+  if (state.connected) {
+    pill.style.background = 'rgba(0, 217, 163, 0.1)';
+    pill.style.borderColor = 'rgba(0, 217, 163, 0.2)';
+    pill.style.color = 'var(--green)';
+    text.textContent = 'Operativo';
+  } else {
+    pill.style.background = 'rgba(255, 107, 122, 0.1)';
+    pill.style.borderColor = 'rgba(255, 107, 122, 0.2)';
+    pill.style.color = 'var(--red)';
+    text.textContent = 'Desconectado';
+  }
+}
+
+// ==================== LOADERS ====================
+async function loadOverview() {
+  const data = await fetchJSON('/admin/metrics/overview');
+  if (!data) { updateConnectionStatus(); return; }
+
+  document.getElementById('mRequests').textContent = formatNumber(data.requests || 0);
+  document.getElementById('mCost').textContent = `$${(data.cost_usd || 0).toFixed(2)}`;
+  document.getElementById('mLatency').textContent = `${data.latency_p95_ms || 0}ms`;
+  document.getElementById('mErrors').textContent = `${(data.error_rate || 0).toFixed(2)}%`;
+
+  if (data.trends) {
+    setTrend('trendRequests', data.trends.requests);
+    setTrend('trendCost', data.trends.cost);
+    setTrend('trendLatency', data.trends.latency);
+    setTrend('trendErrors', data.trends.error_rate);
+  }
+
+  updateConnectionStatus();
+}
+
+function setTrend(id, value) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const isUp = value >= 0;
+  el.className = `metric-trend ${isUp ? 'up' : 'down'}`;
+  el.textContent = `${isUp ? '▲' : '▼'} ${Math.abs(value).toFixed(1)}%`;
+}
+
+async function loadProviders() {
+  const data = await fetchJSON('/admin/metrics/providers');
+  if (!data || !data.providers) return;
+
+  const container = document.getElementById('providersList');
+  container.innerHTML = data.providers.map(p => {
+    const status = p.status?.status || 'unknown';
+    const latency = p.status?.latency_ms || 0;
+    const fails = p.status?.consecutive_fails || 0;
+    const cb = p.circuit_breaker || 'closed';
+
+    return `
+      <div class="provider-row">
+        <div class="provider-name">
+          <span class="provider-dot ${status}"></span>
+          ${p.name}
+          <span style="font-size:10px;color:var(--text-mute);margin-left:6px">CB: ${cb}</span>
+        </div>
+        <div class="provider-stat">${status}</div>
+        <div class="provider-stat">${latency}ms</div>
+        <div class="provider-stat">${fails} fails</div>
+      </div>
+    `;
+  }).join('');
+
+  document.getElementById('providersCount').textContent = `${data.count} activos`;
+}
+
+async function loadSecurity() {
+  const data = await fetchJSON('/admin/metrics/security');
+  if (!data) return;
+
+  document.getElementById('secPII').textContent = data.pii_blocked || 0;
+  document.getElementById('secSecrets').textContent = data.secrets_blocked || 0;
+  document.getElementById('secInjection').textContent = data.injection_blocked || 0;
+  document.getElementById('secBlocked').textContent = data.requests_blocked || 0;
+}
+
+async function loadSystem() {
+  const data = await fetchJSON('/admin/metrics/system');
+  if (!data) return;
+
+  const container = document.getElementById('systemList');
+  container.innerHTML = `
+    <div class="routing-item">
+      <span class="routing-time">CPU</span>
+      <span class="routing-model">${data.num_cpu} cores</span>
+    </div>
+    <div class="routing-item">
+      <span class="routing-time">Go</span>
+      <span class="routing-model">${data.go_version}</span>
+    </div>
+    <div class="routing-item">
+      <span class="routing-time">Goroutines</span>
+      <span class="routing-model">${data.goroutines}</span>
+    </div>
+    <div class="routing-item">
+      <span class="routing-time">Heap</span>
+      <span class="routing-model">${data.heap_alloc_mb.toFixed(2)} MB</span>
+    </div>
+    <div class="routing-item">
+      <span class="routing-time">GC</span>
+      <span class="routing-model">${data.gc_count} ciclos</span>
+    </div>
+  `;
+}
+
+async function loadTimeseries() {
+  const data = await fetchJSON('/admin/metrics/timeseries');
+  if (!data || !data.points || !state.requestsChart) return;
+
+  state.requestsChart.data.labels = data.points.map(p => p.time);
+  state.requestsChart.data.datasets[0].data = data.points.map(p => p.requests);
+  state.requestsChart.update('none');
+}
+
+function formatNumber(n) {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(2) + 'M';
+  if (n >= 1_000) return (n / 1_000).toFixed(2) + 'K';
+  return n.toString();
+}
+
+// ==================== CHARTS ====================
 function getChartColors() {
   const isDark = state.theme === 'dark';
   return {
@@ -739,21 +689,17 @@ function getChartColors() {
 function initCharts() {
   const colors = getChartColors();
 
-  // Requests chart
   const ctx1 = document.getElementById('requestsChart').getContext('2d');
   const gradient = ctx1.createLinearGradient(0, 0, 0, 240);
   gradient.addColorStop(0, 'rgba(102, 126, 234, 0.4)');
   gradient.addColorStop(1, 'rgba(102, 126, 234, 0)');
 
-  const labels = Array.from({length: 24}, (_, i) => `${i}:00`);
-  const data = labels.map(() => Math.floor(Math.random() * 5000) + 3000);
-
   state.requestsChart = new Chart(ctx1, {
     type: 'line',
     data: {
-      labels,
+      labels: [],
       datasets: [{
-        data,
+        data: [],
         borderColor: colors.accent,
         backgroundColor: gradient,
         fill: true,
@@ -761,7 +707,6 @@ function initCharts() {
         borderWidth: 2,
         pointRadius: 0,
         pointHoverRadius: 5,
-        pointHoverBackgroundColor: colors.accent,
       }]
     },
     options: {
@@ -773,10 +718,6 @@ function initCharts() {
         tooltip: {
           backgroundColor: 'rgba(0,0,0,0.85)',
           padding: 12,
-          titleColor: '#fff',
-          bodyColor: '#e0e0e0',
-          borderColor: 'rgba(102,126,234,0.3)',
-          borderWidth: 1,
           cornerRadius: 8,
           displayColors: false,
         }
@@ -795,7 +736,6 @@ function initCharts() {
     }
   });
 
-  // Cost chart
   const ctx2 = document.getElementById('costChart').getContext('2d');
   state.costChart = new Chart(ctx2, {
     type: 'doughnut',
@@ -823,14 +763,6 @@ function initCharts() {
             usePointStyle: true,
             pointStyle: 'circle'
           }
-        },
-        tooltip: {
-          backgroundColor: 'rgba(0,0,0,0.85)',
-          padding: 12,
-          cornerRadius: 8,
-          callbacks: {
-            label: (ctx) => ` $${ctx.parsed}`
-          }
         }
       }
     }
@@ -855,16 +787,12 @@ function updateChartColors() {
 
 // ==================== COMMAND PALETTE ====================
 const commands = [
-  { icon: '📊', label: 'Ir a Dashboard', action: 'dashboard', shortcut: 'G D' },
-  { icon: '🔌', label: 'Ver Providers', action: 'providers' },
-  { icon: '💰', label: 'Ver Costes', action: 'costs' },
-  { icon: '🛡️', label: 'Ver Seguridad', action: 'security' },
-  { icon: '📋', label: 'Ver Logs', action: 'logs' },
-  { icon: '🌙', label: 'Cambiar tema', action: 'toggle-theme', shortcut: 'T' },
   { icon: '🔄', label: 'Recargar datos', action: 'refresh', shortcut: 'R' },
-  { icon: '🔍', label: 'Ver trace de request', action: 'trace' },
+  { icon: '🌙', label: 'Cambiar tema', action: 'toggle-theme', shortcut: 'T' },
   { icon: '📥', label: 'Exportar métricas', action: 'export' },
-  { icon: '⚙️', label: 'Configuración', action: 'settings' },
+  { icon: '🔌', label: 'Ver Providers', action: 'providers' },
+  { icon: '🛡️', label: 'Ver Seguridad', action: 'security' },
+  { icon: '⚙️', label: 'Ver Sistema', action: 'system' },
 ];
 
 function openCommandPalette() {
@@ -896,20 +824,25 @@ function executeCommand(action) {
   closeCommandPalette();
   switch(action) {
     case 'toggle-theme': toggleTheme(); break;
-    case 'refresh': location.reload(); break;
+    case 'refresh': refreshAll(); break;
     case 'export': exportMetrics(); break;
     default: console.log('Command:', action);
   }
 }
 
-function exportMetrics() {
+async function exportMetrics() {
+  const [overview, providers, security, system] = await Promise.all([
+    fetchJSON('/admin/metrics/overview'),
+    fetchJSON('/admin/metrics/providers'),
+    fetchJSON('/admin/metrics/security'),
+    fetchJSON('/admin/metrics/system'),
+  ]);
+
   const data = {
     timestamp: new Date().toISOString(),
-    requests: document.getElementById('mRequests').textContent,
-    cost: document.getElementById('mCost').textContent,
-    latency: document.getElementById('mLatency').textContent,
-    errors: document.getElementById('mErrors').textContent,
+    overview, providers, security, system,
   };
+
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -919,63 +852,11 @@ function exportMetrics() {
   URL.revokeObjectURL(url);
 }
 
-// ==================== KEYBOARD SHORTCUTS ====================
-document.addEventListener('keydown', (e) => {
-  // Ctrl+K / Cmd+K
-  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-    e.preventDefault();
-    openCommandPalette();
-  }
-  // Escape
-  if (e.key === 'Escape') {
-    closeCommandPalette();
-  }
-  // Arrow navigation en command palette
-  if (document.getElementById('cmdOverlay').classList.contains('active')) {
-    const items = document.querySelectorAll('.cmd-item');
-    const selected = document.querySelector('.cmd-item.selected');
-    let idx = Array.from(items).indexOf(selected);
-
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      idx = (idx + 1) % items.length;
-      items.forEach(i => i.classList.remove('selected'));
-      items[idx].classList.add('selected');
-    }
-    if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      idx = (idx - 1 + items.length) % items.length;
-      items.forEach(i => i.classList.remove('selected'));
-      items[idx].classList.add('selected');
-    }
-    if (e.key === 'Enter') {
-      const action = items[idx]?.getAttribute('onclick')?.match(/'([^']+)'/)?.[1];
-      if (action) executeCommand(action);
-    }
-  }
-});
-
-// Buscar en command palette
-document.getElementById('cmdInput')?.addEventListener('input', (e) => {
-  const q = e.target.value.toLowerCase();
-  const filtered = commands.filter(c => c.label.toLowerCase().includes(q));
-  renderCommands(filtered);
-});
-
-// ==================== LOGS EN VIVO (SIMULADO) ====================
-const mockLogs = [
-  'Provider openai seleccionado para gpt-4',
-  'Cache HIT: v1:default::gpt-3.5-turbo:fp_a3f2',
-  'Circuit breaker anthropic → closed',
-  'PII detectada y redactada en request',
-  'Prompt injection bloqueado',
-  'Provider local degradado: latencia 420ms',
-  'Budget alert: tenant=default 82% utilizado',
-  'Rate limit aplicado a 192.168.1.42',
-];
-
+// ==================== LOGS ====================
 function addLogEntry(level, msg) {
   const container = document.getElementById('logsList');
+  if (!container) return;
+
   const now = new Date();
   const time = now.toTimeString().slice(0, 8);
 
@@ -994,23 +875,49 @@ function addLogEntry(level, msg) {
   }
 }
 
-// Añadir logs cada 3-5 segundos
-function scheduleLog() {
-  const delay = 3000 + Math.random() * 2000;
-  setTimeout(() => {
-    const levels = ['info', 'info', 'info', 'warn', 'error'];
-    const level = levels[Math.floor(Math.random() * levels.length)];
-    const msg = mockLogs[Math.floor(Math.random() * mockLogs.length)];
-    addLogEntry(level, msg);
-    scheduleLog();
-  }, delay);
+// ==================== REFRESH ====================
+async function refreshAll() {
+  await Promise.all([
+    loadOverview(),
+    loadProviders(),
+    loadSecurity(),
+    loadSystem(),
+    loadTimeseries(),
+  ]);
+
+  document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
 }
 
+// ==================== KEYBOARD ====================
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+    e.preventDefault();
+    openCommandPalette();
+  }
+  if (e.key === 'Escape') closeCommandPalette();
+  if (e.key === 'r' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName !== 'INPUT') {
+    refreshAll();
+  }
+});
+
+document.getElementById('cmdInput')?.addEventListener('input', (e) => {
+  const q = e.target.value.toLowerCase();
+  const filtered = commands.filter(c => c.label.toLowerCase().includes(q));
+  renderCommands(filtered);
+});
+
 // ==================== INIT ====================
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   initCharts();
-  scheduleLog();
+  await refreshAll();
+
+  addLogEntry('info', `Dashboard conectado a ${API_BASE}`);
+  addLogEntry('info', 'Auto-refresh cada 5s');
+
+  state.refreshInterval = setInterval(refreshAll, 5000);
+
   console.log('%c🛡️ SentinelFlow Console', 'color: #667eea; font-size: 16px; font-weight: bold;');
+  console.log('%cAPI Base:', 'color: #8a8aa0;', API_BASE);
   console.log('%cCtrl+K para abrir el command palette', 'color: #8a8aa0; font-size: 12px;');
 });
 </script>
