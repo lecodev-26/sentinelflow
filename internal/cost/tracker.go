@@ -5,10 +5,10 @@ import (
 "time"
 )
 
-// CostEntry registra el coste de una petición
 type CostEntry struct {
 RequestID    string    `json:"request_id"`
 TenantID     string    `json:"tenant_id"`
+ProjectID    string    `json:"project_id"`
 Provider     string    `json:"provider"`
 Model        string    `json:"model"`
 InputTokens  int       `json:"input_tokens"`
@@ -18,22 +18,26 @@ CostUSD      float64   `json:"cost_usd"`
 Timestamp    time.Time `json:"timestamp"`
 }
 
-// CostTracker rastrea el coste por tenant
-type CostTracker struct {
-mu      sync.RWMutex
-entries []CostEntry
-limits  map[string]*Budget
-}
-
-// Budget define un presupuesto
 type Budget struct {
-TenantID     string    `json:"tenant_id"`
-MonthlyLimit float64   `json:"monthly_limit"`
-Used         float64   `json:"used"`
-ResetDate    time.Time `json:"reset_date"`
+TenantID      string    `json:"tenant_id"`
+MonthlyLimit  float64   `json:"monthly_limit"`
+Used          float64   `json:"used"`
+ResetDate     time.Time `json:"reset_date"`
+Alert80Sent   bool      `json:"alert_80_sent"`
+Alert90Sent   bool      `json:"alert_90_sent"`
+Alert100Sent  bool      `json:"alert_100_sent"`
 }
 
-// NewCostTracker crea un nuevo tracker
+// BudgetAlertCallback se llama cuando se alcanza un threshold
+type BudgetAlertCallback func(tenantID string, threshold int, budget *Budget)
+
+type CostTracker struct {
+mu         sync.RWMutex
+entries    []CostEntry
+limits     map[string]*Budget
+alertCb    BudgetAlertCallback
+}
+
 func NewCostTracker() *CostTracker {
 return &CostTracker{
 entries: make([]CostEntry, 0),
@@ -41,14 +45,20 @@ limits:  make(map[string]*Budget),
 }
 }
 
-// Record registra una petición
-func (ct *CostTracker) Record(tenantID, provider, model string, inputTokens, outputTokens int, cost float64) {
+// SetAlertCallback registra el callback de alertas
+func (ct *CostTracker) SetAlertCallback(cb BudgetAlertCallback) {
+ct.alertCb = cb
+}
+
+// Record registra una petición con tokens reales
+func (ct *CostTracker) Record(tenantID, projectID, provider, model string, inputTokens, outputTokens int, cost float64) {
 ct.mu.Lock()
 defer ct.mu.Unlock()
 
 entry := CostEntry{
 RequestID:    generateRequestID(),
 TenantID:     tenantID,
+ProjectID:    projectID,
 Provider:     provider,
 Model:        model,
 InputTokens:  inputTokens,
@@ -60,13 +70,34 @@ Timestamp:    time.Now(),
 
 ct.entries = append(ct.entries, entry)
 
-// Actualizar budget
+// Actualizar budget + alerts
 if budget, exists := ct.limits[tenantID]; exists {
 budget.Used += cost
+
+if budget.MonthlyLimit > 0 {
+pct := budget.Used / budget.MonthlyLimit * 100
+cb := ct.alertCb
+
+if pct >= 100 && !budget.Alert100Sent {
+budget.Alert100Sent = true
+if cb != nil {
+go cb(tenantID, 100, budget)
+}
+} else if pct >= 90 && !budget.Alert90Sent {
+budget.Alert90Sent = true
+if cb != nil {
+go cb(tenantID, 90, budget)
+}
+} else if pct >= 80 && !budget.Alert80Sent {
+budget.Alert80Sent = true
+if cb != nil {
+go cb(tenantID, 80, budget)
+}
+}
+}
 }
 }
 
-// SetBudget establece un presupuesto para un tenant
 func (ct *CostTracker) SetBudget(tenantID string, monthlyLimit float64) {
 ct.mu.Lock()
 defer ct.mu.Unlock()
@@ -79,58 +110,56 @@ ResetDate:    time.Now().Add(30 * 24 * time.Hour),
 }
 }
 
-// GetBudget devuelve el presupuesto de un tenant
 func (ct *CostTracker) GetBudget(tenantID string) (*Budget, bool) {
 ct.mu.RLock()
-defer ct.mu.RUnlock()
-
 budget, exists := ct.limits[tenantID]
+ct.mu.RUnlock()
+
 if !exists {
 return nil, false
 }
 
 // Resetear si pasó el mes
 if time.Now().After(budget.ResetDate) {
+ct.mu.Lock()
 budget.Used = 0
 budget.ResetDate = time.Now().Add(30 * 24 * time.Hour)
+budget.Alert80Sent = false
+budget.Alert90Sent = false
+budget.Alert100Sent = false
+ct.mu.Unlock()
 }
 
 return budget, true
 }
 
-// CheckBudget verifica si un tenant tiene presupuesto
 func (ct *CostTracker) CheckBudget(tenantID string, estimatedCost float64) (bool, float64) {
 budget, exists := ct.GetBudget(tenantID)
 if !exists {
-return true, 0 // Sin límite
+return true, 0
 }
 
 remaining := budget.MonthlyLimit - budget.Used
 if remaining < estimatedCost {
 return false, remaining
 }
-
 return true, remaining
 }
 
-// GetUsage devuelve el uso de un tenant
 func (ct *CostTracker) GetUsage(tenantID string, days int) []CostEntry {
 ct.mu.RLock()
 defer ct.mu.RUnlock()
 
 var result []CostEntry
 since := time.Now().Add(-time.Duration(days) * 24 * time.Hour)
-
 for _, entry := range ct.entries {
 if entry.TenantID == tenantID && entry.Timestamp.After(since) {
 result = append(result, entry)
 }
 }
-
 return result
 }
 
-// GetTotalCost devuelve el coste total de un tenant
 func (ct *CostTracker) GetTotalCost(tenantID string, days int) float64 {
 entries := ct.GetUsage(tenantID, days)
 var total float64
