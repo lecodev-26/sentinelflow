@@ -22,6 +22,8 @@ import (
 "github.com/lecodev-26/sentinelflow/internal/rbac"
 )
 
+const Version = "1.0.0"
+
 func main() {
 port := flag.String("port", "8080", "Puerto del proxy")
 adminPort := flag.String("admin-port", "8081", "Puerto del control plane")
@@ -29,7 +31,7 @@ metricsPort := flag.String("metrics-port", "9090", "Puerto para métricas")
 configFile := flag.String("config", "configs/rules.yaml", "Archivo de configuración")
 flag.Parse()
 
-log.Printf("🛡️ SentinelFlow iniciando")
+log.Printf("🛡️ SentinelFlow v%s", Version)
 log.Printf("   Gateway:       :%s", *port)
 log.Printf("   Control Plane: :%s", *adminPort)
 log.Printf("   Métricas:      :%s", *metricsPort)
@@ -113,31 +115,17 @@ gatewayRouter.PathPrefix("/").Handler(mainHandler)
 
 // === CONTROL PLANE ROUTER ===
 adminRouter := mux.NewRouter()
-
-// CORS para el dashboard
 adminRouter.Use(corsMiddleware)
 
-// Handlers admin
+// Crear handlers
 orgHandler := controlplane.NewOrganizationHandler(orgMgr)
-orgHandler.Register(adminRouter)
-
 userHandler := controlplane.NewUserHandler(userMgr)
-userHandler.Register(adminRouter)
-
 providerHandler := controlplane.NewProviderHandler(p)
-providerHandler.Register(adminRouter)
-
 metricsHandler := controlplane.NewMetricsHandler(p)
-metricsHandler.Register(adminRouter)
 
-// Health del admin
-adminRouter.HandleFunc("/admin/health", func(w http.ResponseWriter, r *http.Request) {
-gateway.WriteJSON(w, http.StatusOK, map[string]interface{}{
-"status":  "ok",
-"service": "sentinel-flow-control-plane",
-"version": "0.3.0",
-})
-}).Methods("GET")
+// Registrar con versionado v1
+cpRouter := controlplane.NewRouter(orgHandler, userHandler, providerHandler, metricsHandler)
+cpRouter.Register(adminRouter)
 
 // Servidores
 gatewaySrv := &http.Server{
@@ -173,6 +161,8 @@ log.Fatalf("❌ Gateway error: %v", err)
 
 go func() {
 log.Printf("✅ Control Plane en http://localhost:%s", *adminPort)
+log.Printf("   API v1: http://localhost:%s/v1/...", *adminPort)
+log.Printf("   Legacy: http://localhost:%s/admin/... (deprecated)", *adminPort)
 if err := adminSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 log.Fatalf("❌ Admin error: %v", err)
 }
@@ -199,7 +189,6 @@ p.Stop()
 log.Println("✅ SentinelFlow detenido correctamente")
 }
 
-// corsMiddleware permite peticiones desde el dashboard
 func corsMiddleware(next http.Handler) http.Handler {
 return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 w.Header().Set("Access-Control-Allow-Origin", "*")
