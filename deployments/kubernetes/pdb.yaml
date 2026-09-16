@@ -1,0 +1,12 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: sentinelflow-pdb
+  namespace: sentinelflow
+  labels:
+    app.kubernetes.io/name: sentinelflow
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sentinelflow

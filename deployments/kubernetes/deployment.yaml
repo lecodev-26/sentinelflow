@@ -2,64 +2,125 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: sentinelflow
-  namespace: default
+  namespace: sentinelflow
   labels:
-    app: sentinelflow
+    app.kubernetes.io/name: sentinelflow
+    app.kubernetes.io/version: "0.3.0"
+    app.kubernetes.io/component: gateway
 spec:
   replicas: 3
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
-      app: sentinelflow
+      app.kubernetes.io/name: sentinelflow
   template:
     metadata:
       labels:
-        app: sentinelflow
+        app.kubernetes.io/name: sentinelflow
+        app.kubernetes.io/version: "0.3.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
     spec:
+      serviceAccountName: sentinelflow
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: sentinelflow
-        image: sentinelflow:latest
+        image: sentinelflow:0.3.0
         imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
         ports:
-        - containerPort: 8080
-          name: http
-        - containerPort: 9090
-          name: metrics
+        - name: gateway
+          containerPort: 8080
+        - name: admin
+          containerPort: 8081
+        - name: metrics
+          containerPort: 9090
         env:
         - name: OPENAI_API_KEY
           valueFrom:
             secretKeyRef:
-              name: openai-secret
-              key: api-key
+              name: sentinelflow-secrets
+              key: openai-api-key
+              optional: true
         - name: ANTHROPIC_API_KEY
           valueFrom:
             secretKeyRef:
-              name: anthropic-secret
-              key: api-key
+              name: sentinelflow-secrets
+              key: anthropic-api-key
+              optional: true
         - name: REDIS_URL
-          value: "redis://redis-service:6379"
+          value: "redis://sentinelflow-redis:6379"
+        - name: LOG_LEVEL
+          value: "info"
         resources:
           requests:
             memory: "256Mi"
             cpu: "250m"
           limits:
-            memory: "512Mi"
-            cpu: "500m"
+            memory: "1Gi"
+            cpu: "1000m"
         livenessProbe:
           httpGet:
             path: /health
-            port: 8080
-          initialDelaySeconds: 30
-          periodSeconds: 10
+            port: gateway
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          timeoutSeconds: 3
+          failureThreshold: 3
         readinessProbe:
           httpGet:
             path: /health
-            port: 8080
+            port: gateway
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 2
+        startupProbe:
+          httpGet:
+            path: /health
+            port: gateway
           initialDelaySeconds: 5
           periodSeconds: 5
+          failureThreshold: 30
         volumeMounts:
         - name: config
           mountPath: /configs
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+        - name: cache
+          mountPath: /cache
       volumes:
       - name: config
         configMap:
           name: sentinelflow-config
+      - name: tmp
+        emptyDir: {}
+      - name: cache
+        emptyDir: {}
+      terminationGracePeriodSeconds: 30
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sentinelflow
+  namespace: sentinelflow
+  labels:
+    app.kubernetes.io/name: sentinelflow
