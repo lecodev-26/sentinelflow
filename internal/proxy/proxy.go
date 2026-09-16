@@ -77,15 +77,26 @@ json.NewEncoder(w).Encode(map[string]interface{}{
 "providers": len(p.config.Providers),
 "rules":     len(p.config.Rules),
 },
-"cache":     p.engine.GetCacheStats(),
-"providers": p.engine.GetProviderStatus(),
+"cache":            p.engine.GetCacheStats(),
+"providers":        p.engine.GetProviderStatus(),
 "circuit_breakers": p.engine.GetCircuitBreakerStatus(),
 })
 }
 
+// GetProvidersStatus devuelve el estado real de los providers
 func (p *Proxy) GetProvidersStatus(w http.ResponseWriter, r *http.Request) {
 w.Header().Set("Content-Type", "application/json")
 json.NewEncoder(w).Encode(p.engine.GetProviderStatus())
+}
+
+// GetCircuitBreakerStatus devuelve el estado de los circuit breakers
+func (p *Proxy) GetCircuitBreakerStatus() map[string]string {
+return p.engine.GetCircuitBreakerStatus()
+}
+
+// GetProvidersStatusMap devuelve el estado como mapa (para control plane)
+func (p *Proxy) GetProvidersStatusMap() map[string]interface{} {
+return p.engine.GetProviderStatus()
 }
 
 func (p *Proxy) StreamLogs(w http.ResponseWriter, r *http.Request) {

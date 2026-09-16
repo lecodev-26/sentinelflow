@@ -11,6 +11,7 @@ import (
 "time"
 
 "github.com/gorilla/mux"
+"github.com/lecodev-26/sentinelflow/internal/controlplane"
 "github.com/lecodev-26/sentinelflow/internal/cost"
 "github.com/lecodev-26/sentinelflow/internal/gateway"
 "github.com/lecodev-26/sentinelflow/internal/logger"
@@ -23,13 +24,16 @@ import (
 
 func main() {
 port := flag.String("port", "8080", "Puerto del proxy")
+adminPort := flag.String("admin-port", "8081", "Puerto del control plane")
 metricsPort := flag.String("metrics-port", "9090", "Puerto para métricas")
 configFile := flag.String("config", "configs/rules.yaml", "Archivo de configuración")
 flag.Parse()
 
-log.Printf("🛡️ SentinelFlow iniciando en puerto %s", *port)
+log.Printf("🛡️ SentinelFlow iniciando")
+log.Printf("   Gateway:     :%s", *port)
+log.Printf("   Control Plane: :%s", *adminPort)
+log.Printf("   Métricas:    :%s", *metricsPort)
 
-// Inicializar tracing (vacío = no-op)
 if err := observability.InitTracing("sentinelflow", ""); err != nil {
 log.Printf("⚠️ Tracing no disponible: %v", err)
 }
@@ -74,7 +78,6 @@ quotaMw.SetQuota("default", gateway.DefaultQuota())
 costMw := gateway.NewCostMiddleware(costTracker, true)
 obsMw := gateway.NewObservabilityMiddleware(false)
 
-// Pipeline completo
 pipeline := gateway.NewPipeline().
 Use(gateway.ContextMiddleware()).
 Use(obsMw.Handler).
@@ -97,21 +100,51 @@ Use(costMw.Handler)
 
 mainHandler := pipeline.Then(p.Handler())
 
-finalRouter := mux.NewRouter()
-finalRouter.HandleFunc("/health", p.HealthCheck)
-finalRouter.PathPrefix("/dashboard").Handler(
+// === GATEWAY ROUTER ===
+gatewayRouter := mux.NewRouter()
+gatewayRouter.HandleFunc("/health", p.HealthCheck)
+gatewayRouter.PathPrefix("/dashboard").Handler(
 http.StripPrefix("/dashboard", http.FileServer(http.Dir("./web/dashboard"))),
 )
-finalRouter.PathPrefix("/demo").Handler(
+gatewayRouter.PathPrefix("/demo").Handler(
 http.StripPrefix("/demo", http.FileServer(http.Dir("./web/demo"))),
 )
-finalRouter.HandleFunc("/api/providers", p.GetProvidersStatus).Methods("GET")
-finalRouter.HandleFunc("/api/logs/stream", p.StreamLogs).Methods("GET")
-finalRouter.PathPrefix("/").Handler(mainHandler)
+gatewayRouter.PathPrefix("/").Handler(mainHandler)
 
-srv := &http.Server{
+// === CONTROL PLANE ROUTER ===
+adminRouter := mux.NewRouter()
+
+// Registrar handlers admin
+orgHandler := controlplane.NewOrganizationHandler(orgMgr)
+orgHandler.Register(adminRouter)
+
+userHandler := controlplane.NewUserHandler(userMgr)
+userHandler.Register(adminRouter)
+
+providerHandler := controlplane.NewProviderHandler(p)
+providerHandler.Register(adminRouter)
+
+// Health del admin
+adminRouter.HandleFunc("/admin/health", func(w http.ResponseWriter, r *http.Request) {
+gateway.WriteJSON(w, http.StatusOK, map[string]interface{}{
+"status":  "ok",
+"service": "sentinel-flow-control-plane",
+"version": "0.3.0",
+})
+}).Methods("GET")
+
+// Servidores
+gatewaySrv := &http.Server{
 Addr:         ":" + *port,
-Handler:      finalRouter,
+Handler:      gatewayRouter,
+ReadTimeout:  30 * time.Second,
+WriteTimeout: 30 * time.Second,
+IdleTimeout:  60 * time.Second,
+}
+
+adminSrv := &http.Server{
+Addr:         ":" + *adminPort,
+Handler:      adminRouter,
 ReadTimeout:  30 * time.Second,
 WriteTimeout: 30 * time.Second,
 IdleTimeout:  60 * time.Second,
@@ -126,19 +159,32 @@ stop := make(chan os.Signal, 1)
 signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
 go func() {
-log.Printf("✅ Proxy en http://localhost:%s", *port)
-log.Printf("📊 Dashboard en http://localhost:%s/dashboard", *port)
-log.Printf("🎨 Demo en http://localhost:%s/demo", *port)
-log.Printf("📈 Métricas en http://localhost:%s/metrics", *metricsPort)
-log.Printf("🔗 Pipeline completo: context → observability → metrics → limits → auth → security → ratelimit → quota → cache → cost → engine")
-log.Printf("💰 Budget: $100/mes para tenant 'default'")
-log.Printf("📊 Tracing: OpenTelemetry (no-op si no hay endpoint)")
-if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-log.Fatalf("❌ Error: %v", err)
+log.Printf("✅ Gateway en http://localhost:%s", *port)
+if err := gatewaySrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+log.Fatalf("❌ Gateway error: %v", err)
 }
 }()
 
 go func() {
+log.Printf("✅ Control Plane en http://localhost:%s", *adminPort)
+log.Printf("   GET    /admin/health")
+log.Printf("   GET    /admin/providers")
+log.Printf("   GET    /admin/circuit-breakers")
+log.Printf("   GET    /admin/organizations")
+log.Printf("   POST   /admin/organizations")
+log.Printf("   GET    /admin/organizations/{id}")
+log.Printf("   POST   /admin/organizations/{id}/projects")
+log.Printf("   POST   /admin/users")
+log.Printf("   GET    /admin/users/{id}")
+log.Printf("   POST   /admin/users/{id}/api-keys")
+log.Printf("   POST   /admin/api-keys/{key}/revoke")
+if err := adminSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+log.Fatalf("❌ Admin error: %v", err)
+}
+}()
+
+go func() {
+log.Printf("✅ Métricas en http://localhost:%s/metrics", *metricsPort)
 if err := metricsSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 log.Printf("⚠️ Error en métricas: %v", err)
 }
@@ -150,7 +196,8 @@ log.Println("🔄 Apagando...")
 ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 defer cancel()
 
-srv.Shutdown(ctx)
+gatewaySrv.Shutdown(ctx)
+adminSrv.Shutdown(ctx)
 metricsSrv.Shutdown(ctx)
 p.Stop()
 
