@@ -14,55 +14,48 @@ import (
 "github.com/lecodev-26/sentinelflow/internal/router"
 )
 
-// Engine es el punto de entrada del gateway.
-// Ahora usa provider.Registry + router.SmartRouter en lugar de lógica propia.
 type Engine struct {
-config  *config.Config
+config   *config.Config
 registry *registry.Registry
-router  *router.SmartRouter
+router   *router.ResilientRouter
 }
 
-// NewEngine crea un nuevo Engine unificado
 func NewEngine(cfg *config.Config) *Engine {
-// Crear registry
 reg := registry.NewRegistry()
 
-// Registrar todos los providers de la configuración
-// usando el adapter HTTP genérico
 for _, p := range cfg.Providers {
 adapter := provider.NewHTTPProvider(
 p.Name,
 p.URL,
 p.Headers,
 p.Timeout,
-nil, // modelos: se descubrirán dinámicamente
+nil,
 )
 reg.Register(adapter)
 logger.Infof("✅ Provider registrado: %s", p.Name)
 }
 
-// Crear smart router
-smartRouter := router.NewSmartRouter(reg)
+// Crear ResilientRouter con circuit breaker
+cbCfg := router.DefaultCBConfig()
+resilientRouter := router.NewResilientRouter(reg, cbCfg)
 
 return &Engine{
 config:   cfg,
 registry: reg,
-router:   smartRouter,
+router:   resilientRouter,
 }
 }
 
-// Route procesa una petición HTTP y la enruta al mejor proveedor
 func (e *Engine) Route(path, method string, body []byte, headers http.Header) ([]byte, int, error) {
 logger.Infof("📨 %s %s", method, path)
 
-// 1. Buscar regla para esta ruta
 rule := e.config.GetRuleByPath(path, method)
 if rule == nil {
 logger.Warnf("⚠️ No hay regla para %s %s", method, path)
 return nil, http.StatusNotFound, fmt.Errorf("no rule for %s %s", method, path)
 }
 
-// 2. Parsear body para obtener modelo
+// Parsear body
 var reqBody map[string]interface{}
 var model string
 if len(body) > 0 {
@@ -73,7 +66,7 @@ model = m
 }
 }
 
-// 3. Construir ChatRequest normalizado
+// Construir ChatRequest normalizado
 messages := []provider.Message{}
 if msgs, ok := reqBody["messages"].([]interface{}); ok {
 for _, m := range msgs {
@@ -105,7 +98,7 @@ if stream, ok := reqBody["stream"].(bool); ok {
 chatReq.Stream = stream
 }
 
-// 4. Ejecutar con el SmartRouter
+// Ejecutar con ResilientRouter (incluye circuit breaker + fallback)
 ctx := context.Background()
 resp, err := e.router.Route(ctx, chatReq)
 if err != nil {
@@ -116,7 +109,6 @@ return nil, http.StatusServiceUnavailable, err
 
 logger.Infof("✅ Respuesta de: %s (%.2fms)", resp.Provider, float64(resp.Latency.Microseconds())/1000.0)
 
-// 5. Convertir respuesta a JSON
 respJSON, err := json.Marshal(resp)
 if err != nil {
 return nil, http.StatusInternalServerError, fmt.Errorf("error marshaling response: %w", err)
@@ -125,7 +117,6 @@ return nil, http.StatusInternalServerError, fmt.Errorf("error marshaling respons
 return respJSON, http.StatusOK, nil
 }
 
-// GetCacheStats devuelve estadísticas (placeholder mientras migramos)
 func (e *Engine) GetCacheStats() map[string]interface{} {
 return map[string]interface{}{
 "enabled": e.config.Cache.Enabled,
@@ -134,7 +125,6 @@ return map[string]interface{}{
 }
 }
 
-// GetProviderStatus devuelve el estado de los providers
 func (e *Engine) GetProviderStatus() map[string]interface{} {
 status := make(map[string]interface{})
 for _, p := range e.registry.GetAll() {
@@ -143,4 +133,9 @@ status[p.Name()] = map[string]interface{}{
 }
 }
 return status
+}
+
+// GetCircuitBreakerStatus devuelve el estado de los circuit breakers
+func (e *Engine) GetCircuitBreakerStatus() map[string]string {
+return e.router.GetCircuitBreakerStatus()
 }
