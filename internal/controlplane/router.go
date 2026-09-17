@@ -31,7 +31,7 @@ metrics:   metrics,
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 w.Header().Set("Content-Type", "application/json")
-w.Write([]byte(`{"status":"ok","service":"sentinelflow-control-plane","version":"1.0.0"}`))
+w.Write([]byte(`{"status":"ok","service":"sentinelflow-control-plane","version":"2.0.0"}`))
 }
 
 // Register registra todas las rutas con versionado v1
@@ -56,11 +56,12 @@ v1.HandleFunc("/metrics/security", r.metrics.Security).Methods("GET")
 v1.HandleFunc("/metrics/routing", r.metrics.Routing).Methods("GET")
 v1.HandleFunc("/metrics/timeseries", r.metrics.Timeseries).Methods("GET")
 v1.HandleFunc("/metrics/system", r.metrics.System).Methods("GET")
+v1.HandleFunc("/models", r.metrics.Models).Methods("GET")
 
 // Health (sin versión)
 router.HandleFunc("/health", healthHandler).Methods("GET")
 
-// Alias legacy /admin/* (deprecated, será removido en v2.0)
+// Alias legacy /admin/* (deprecated, será removido en v3.0)
 admin := router.PathPrefix("/admin").Subrouter()
 admin.HandleFunc("/organizations", r.orgs.List).Methods("GET")
 admin.HandleFunc("/organizations", r.orgs.Create).Methods("POST")
@@ -80,5 +81,6 @@ admin.HandleFunc("/metrics/security", r.metrics.Security).Methods("GET")
 admin.HandleFunc("/metrics/routing", r.metrics.Routing).Methods("GET")
 admin.HandleFunc("/metrics/timeseries", r.metrics.Timeseries).Methods("GET")
 admin.HandleFunc("/metrics/system", r.metrics.System).Methods("GET")
+admin.HandleFunc("/models", r.metrics.Models).Methods("GET")
 admin.HandleFunc("/health", healthHandler).Methods("GET")
 }

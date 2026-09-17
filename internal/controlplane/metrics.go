@@ -141,3 +141,24 @@ return 0
 }
 
 var _ = json.Marshal
+
+// Models devuelve todos los modelos registrados (OpenAI-compatible)
+func (h *MetricsHandler) Models(w http.ResponseWriter, r *http.Request) {
+models := h.proxy.GetModels()
+
+// Formato OpenAI
+data := make([]map[string]interface{}, 0, len(models))
+for _, m := range models {
+data = append(data, map[string]interface{}{
+"id":       m.ID,
+"object":   "model",
+"created":  m.DiscoveredAt.Unix(),
+"owned_by": m.Provider,
+})
+}
+
+gateway.WriteJSON(w, http.StatusOK, map[string]interface{}{
+"object": "list",
+"data":   data,
+})
+}
