@@ -14,6 +14,11 @@ import (
 "github.com/lecodev-26/sentinelflow/internal/accounting"
 "github.com/lecodev-26/sentinelflow/internal/audit"
 "github.com/lecodev-26/sentinelflow/internal/controlplane"
+"github.com/lecodev-26/sentinelflow/internal/enterprise/hierarchy"
+"github.com/lecodev-26/sentinelflow/internal/enterprise/regions"
+"github.com/lecodev-26/sentinelflow/internal/enterprise/scim"
+"github.com/lecodev-26/sentinelflow/internal/enterprise/sso"
+"github.com/lecodev-26/sentinelflow/internal/enterprise/vault"
 "github.com/lecodev-26/sentinelflow/internal/gateway"
 "github.com/lecodev-26/sentinelflow/internal/logger"
 "github.com/lecodev-26/sentinelflow/internal/metrics"
@@ -27,7 +32,7 @@ import (
 "github.com/redis/go-redis/v9"
 )
 
-const Version = "2.7.0"
+const Version = "2.9.0"
 
 func main() {
 port := flag.String("port", "8080", "Puerto del proxy")
@@ -58,6 +63,33 @@ if err := store.Migrate(context.Background()); err != nil {
 log.Fatalf("❌ Error aplicando migraciones: %v", err)
 }
 log.Printf("✅ Base de datos lista: %s", *dbPath)
+
+// === ENTERPRISE V2.9 ===
+ssoManager := sso.NewManager()
+logger.Info("🔐 SSO Manager iniciado")
+
+scimHandler := scim.NewHandler()
+logger.Info("👥 SCIM handler iniciado")
+
+hierarchyTree := hierarchy.NewTree()
+// Crear root org
+hierarchyTree.CreateNode("", "root", "Root", "org")
+logger.Info("🌳 Organization hierarchy iniciada")
+
+vaultKey := os.Getenv("SENTINELFLOW_VAULT_KEY")
+credentialVault, err := vault.NewVault(vaultKey)
+if err != nil {
+log.Fatalf("❌ Error creando vault: %v", err)
+}
+if vaultKey == "" {
+logger.Warnf("⚠️ Vault iniciado con key aleatoria (NO persistente). Configura SENTINELFLOW_VAULT_KEY")
+} else {
+logger.Info("🔒 Credential vault iniciado (AES-256-GCM)")
+}
+
+regionResolver := regions.NewResolver()
+	_ = regionResolver
+logger.Info("🌍 Regional routing iniciado")
 
 // === OBSERVABILITY V2.7 ===
 traceStore := traces.NewStore(10000)
@@ -141,7 +173,7 @@ dedupMw := gateway.NewDedupMiddleware(true)
 bulkheadMw := gateway.NewBulkheadMiddleware(200, 5*time.Second)
 accountingMw := gateway.NewAccountingMiddleware(accountingSvc, true)
 
-// Pipeline completo V2.7
+// Pipeline completo V2.9
 pipeline := gateway.NewPipeline().
 Use(gateway.ContextMiddleware()).
 Use(obsMw.Handler).
@@ -223,7 +255,7 @@ signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
 go func() {
 log.Printf("✅ Gateway en http://localhost:%s", *port)
-log.Printf("   Pipeline V2.7: context → obs → metrics → limits → bulkhead → dedup → auth → security → ratelimit → quota → cache → accounting → engine")
+log.Printf("   Pipeline V2.9: context → obs → metrics → limits → bulkhead → dedup → auth → security → ratelimit → quota → cache → accounting → engine")
 if err := gatewaySrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 log.Fatalf("❌ Gateway error: %v", err)
 }
@@ -231,12 +263,11 @@ log.Fatalf("❌ Gateway error: %v", err)
 
 go func() {
 log.Printf("✅ Control Plane en http://localhost:%s", *adminPort)
-log.Printf("   Nuevos endpoints V2.7:")
-log.Printf("   GET /v1/traces                  - Listar traces")
-log.Printf("   GET /v1/traces/{id}             - Ver trace completo")
-log.Printf("   GET /v1/metrics/providers/analytics - Analytics de providers")
-log.Printf("   GET /v1/metrics/routing/analytics   - Analytics de routing")
-log.Printf("   GET /v1/metrics/costs                - Analytics de costes")
+log.Printf("   Enterprise V2.9:")
+log.Printf("   SSO providers registrados: %d", len(ssoManager.ListProviders()))
+log.Printf("   SCIM users: %d", len(scimHandler.List()))
+log.Printf("   Hierarchy nodes: %d", hierarchyTree.Size())
+log.Printf("   Vault entries: %d", len(credentialVault.List()))
 if err := adminSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 log.Fatalf("❌ Admin error: %v", err)
 }
