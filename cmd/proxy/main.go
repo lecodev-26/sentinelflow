@@ -22,7 +22,7 @@ import (
 "github.com/lecodev-26/sentinelflow/internal/rbac"
 )
 
-const Version = "2.0.0"
+const Version = "2.3.0"
 
 func main() {
 port := flag.String("port", "8080", "Puerto del proxy")
@@ -55,7 +55,7 @@ if err != nil {
 log.Fatalf("❌ Error creando usuario: %v", err)
 }
 
-rawKey, _, err := userMgr.CreateAPIKey(defaultUser.ID, "default-key", "")
+rawKey, _, err := userMgr.CreateAPIKey(defaultUser.ID, "default-key", "", nil, 0)
 if err != nil {
 log.Fatalf("❌ Error creando API key: %v", err)
 }
@@ -123,13 +123,11 @@ gatewayRouter.PathPrefix("/").Handler(mainHandler)
 adminRouter := mux.NewRouter()
 adminRouter.Use(corsMiddleware)
 
-// Crear handlers
 orgHandler := controlplane.NewOrganizationHandler(orgMgr)
 userHandler := controlplane.NewUserHandler(userMgr)
 providerHandler := controlplane.NewProviderHandler(p)
 metricsHandler := controlplane.NewMetricsHandler(p)
 
-// Registrar con versionado v1
 cpRouter := controlplane.NewRouter(orgHandler, userHandler, providerHandler, metricsHandler)
 cpRouter.Register(adminRouter)
 

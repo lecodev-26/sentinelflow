@@ -3,6 +3,7 @@ package controlplane
 import (
 "encoding/json"
 "net/http"
+"time"
 
 "github.com/gorilla/mux"
 "github.com/lecodev-26/sentinelflow/internal/gateway"
@@ -28,10 +29,10 @@ r.HandleFunc("/admin/api-keys/{key}/revoke", h.RevokeAPIKey).Methods("POST")
 // Create crea un nuevo usuario
 func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
 var req struct {
-Email  string    `json:"email"`
-Name   string    `json:"name"`
-Role   string    `json:"role"`
-OrgID  string    `json:"org_id"`
+Email string `json:"email"`
+Name  string `json:"name"`
+Role  string `json:"role"`
+OrgID string `json:"org_id"`
 }
 if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 gateway.WriteError(w, gateway.NewInvalidRequestError("invalid JSON"))
@@ -77,15 +78,29 @@ vars := mux.Vars(r)
 userID := vars["id"]
 
 var req struct {
-Name      string `json:"name"`
-ProjectID string `json:"project_id"`
+Name      string   `json:"name"`
+ProjectID string   `json:"project_id"`
+Scopes    []string `json:"scopes"`
+TTLHours  int      `json:"ttl_hours"`
 }
 if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 gateway.WriteError(w, gateway.NewInvalidRequestError("invalid JSON"))
 return
 }
 
-rawKey, apiKey, err := h.mgr.CreateAPIKey(userID, req.Name, req.ProjectID)
+// Convertir scopes
+var scopes []rbac.Scope
+for _, s := range req.Scopes {
+scopes = append(scopes, rbac.Scope(s))
+}
+
+// TTL
+ttl := time.Duration(req.TTLHours) * time.Hour
+if ttl == 0 {
+ttl = 365 * 24 * time.Hour
+}
+
+rawKey, apiKey, err := h.mgr.CreateAPIKey(userID, req.Name, req.ProjectID, scopes, ttl)
 if err != nil {
 gateway.WriteError(w, gateway.NewInvalidRequestError(err.Error()))
 return
