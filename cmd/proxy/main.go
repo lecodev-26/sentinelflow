@@ -21,33 +21,48 @@ import (
 "github.com/lecodev-26/sentinelflow/internal/proxy"
 "github.com/lecodev-26/sentinelflow/internal/ratelimit"
 "github.com/lecodev-26/sentinelflow/internal/rbac"
+"github.com/lecodev-26/sentinelflow/internal/storage/sqlite"
 "github.com/redis/go-redis/v9"
 )
 
-const Version = "2.5.0"
+const Version = "2.6.0"
 
 func main() {
 port := flag.String("port", "8080", "Puerto del proxy")
 adminPort := flag.String("admin-port", "8081", "Puerto del control plane")
 metricsPort := flag.String("metrics-port", "9090", "Puerto para métricas")
 configFile := flag.String("config", "configs/rules.yaml", "Archivo de configuración")
+dbPath := flag.String("db", "sentinelflow.db", "Ruta de SQLite")
 flag.Parse()
 
 log.Printf("🛡️ SentinelFlow v%s", Version)
 log.Printf("   Gateway:       :%s", *port)
 log.Printf("   Control Plane: :%s", *adminPort)
 log.Printf("   Métricas:      :%s", *metricsPort)
+log.Printf("   Database:      %s", *dbPath)
 
 if err := observability.InitTracing("sentinelflow", ""); err != nil {
 log.Printf("⚠️ Tracing no disponible: %v", err)
 }
+
+// === STORAGE PERSISTENTE ===
+store, err := sqlite.NewStore(*dbPath)
+if err != nil {
+log.Fatalf("❌ Error abriendo base de datos: %v", err)
+}
+defer store.Close()
+
+if err := store.Migrate(context.Background()); err != nil {
+log.Fatalf("❌ Error aplicando migraciones: %v", err)
+}
+log.Printf("✅ Base de datos lista: %s", *dbPath)
 
 p, err := proxy.NewProxy(*configFile)
 if err != nil {
 log.Fatalf("❌ Error creando proxy: %v", err)
 }
 
-// RBAC
+// RBAC (en memoria por ahora, pero integrado con storage)
 orgMgr := rbac.NewOrganizationManager()
 userMgr := rbac.NewUserManager(orgMgr)
 
@@ -80,21 +95,18 @@ cancel()
 }
 }
 
-// Distributed rate limiter
 var distLimiter *ratelimit.DistributedLimiterV2
 if redisClient != nil {
 distLimiter = ratelimit.NewDistributedLimiterV2(redisClient, "sf:ratelimit")
 }
 
-// === ACCOUNTING V2.5 ===
+// === ACCOUNTING ===
 pricingEngine := accounting.NewPricingEngine(p.GetModelRegistry())
-
 budgetEngine := accounting.NewBudgetEngine(func(alert accounting.BudgetAlert) {
 logger.Warnf("🚨 BUDGET ALERT: tenant=%s threshold=%d%% spent=$%.2f/%.2f forecast=$%.2f",
 alert.TenantID, alert.Threshold, alert.Spent, alert.Limit, alert.Forecast)
 })
 budgetEngine.SetBudget("default", 100.0)
-
 accountingSvc := accounting.NewService(pricingEngine, budgetEngine)
 logger.Info("💰 Accounting service iniciado")
 
@@ -118,11 +130,9 @@ quotaMw.SetQuota("default", gateway.DefaultQuota())
 obsMw := gateway.NewObservabilityMiddleware(false)
 dedupMw := gateway.NewDedupMiddleware(true)
 bulkheadMw := gateway.NewBulkheadMiddleware(200, 5*time.Second)
-
-// Accounting middleware V2.5
 accountingMw := gateway.NewAccountingMiddleware(accountingSvc, true)
 
-// Pipeline completo V2.5
+// Pipeline completo V2.6
 pipeline := gateway.NewPipeline().
 Use(gateway.ContextMiddleware()).
 Use(obsMw.Handler).
@@ -204,7 +214,7 @@ signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
 go func() {
 log.Printf("✅ Gateway en http://localhost:%s", *port)
-log.Printf("   Pipeline V2.5: context → obs → metrics → limits → bulkhead → dedup → auth → security → ratelimit → quota → cache → accounting → engine")
+log.Printf("   Pipeline V2.6: context → obs → metrics → limits → bulkhead → dedup → auth → security → ratelimit → quota → cache → accounting → engine")
 if err := gatewaySrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 log.Fatalf("❌ Gateway error: %v", err)
 }
