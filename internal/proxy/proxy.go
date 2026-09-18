@@ -72,7 +72,7 @@ healthMonitor := health.NewMonitor(30*time.Second, 5*time.Second)
 for _, p := range reg.GetAll() {
 healthMonitor.Register(p)
 }
-healthMonitor.Start(nil)
+healthMonitor.Start(context.Background())
 logger.Info("❤️ Health monitor iniciado")
 
 // Intelligent router

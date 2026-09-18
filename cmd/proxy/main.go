@@ -21,9 +21,10 @@ import (
 "github.com/lecodev-26/sentinelflow/internal/proxy"
 "github.com/lecodev-26/sentinelflow/internal/ratelimit"
 "github.com/lecodev-26/sentinelflow/internal/rbac"
+"github.com/redis/go-redis/v9"
 )
 
-const Version = "2.3.0"
+const Version = "2.4.0"
 
 func main() {
 port := flag.String("port", "8080", "Puerto del proxy")
@@ -62,6 +63,29 @@ log.Fatalf("❌ Error creando API key: %v", err)
 }
 log.Printf("🔑 API key demo: %s", rawKey)
 
+// Redis (opcional)
+var redisClient *redis.Client
+if redisURL := os.Getenv("REDIS_URL"); redisURL != "" {
+opt, err := redis.ParseURL(redisURL)
+if err == nil {
+redisClient = redis.NewClient(opt)
+ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+if err := redisClient.Ping(ctx).Err(); err != nil {
+log.Printf("⚠️ Redis no disponible: %v", err)
+redisClient = nil
+} else {
+log.Printf("✅ Redis conectado: %s", redisURL)
+}
+cancel()
+}
+}
+
+// Distributed rate limiter
+var distLimiter *ratelimit.DistributedLimiterV2
+if redisClient != nil {
+distLimiter = ratelimit.NewDistributedLimiterV2(redisClient, "sf:ratelimit")
+}
+
 // Cost tracker
 costTracker := cost.NewCostTracker()
 costTracker.SetBudget("default", 100.0)
@@ -70,7 +94,7 @@ logger.Warnf("🚨 BUDGET ALERT: tenant=%s threshold=%d%% used=$%.2f/%.2f",
 tenantID, threshold, budget.Used, budget.MonthlyLimit)
 })
 
-// Audit: suscribir al bus de eventos
+// Audit
 audit.SubscribeAll(&audit.LoggerWriter{})
 logger.Info("📝 Audit system iniciado")
 
@@ -89,20 +113,33 @@ quotaMw := gateway.NewQuotaMiddleware(true)
 quotaMw.SetQuota("default", gateway.DefaultQuota())
 costMw := gateway.NewCostMiddleware(costTracker, true)
 obsMw := gateway.NewObservabilityMiddleware(false)
+dedupMw := gateway.NewDedupMiddleware(true)
+bulkheadMw := gateway.NewBulkheadMiddleware(200, 5*time.Second)
 
-// Pipeline completo
+// Pipeline completo V2.4
 pipeline := gateway.NewPipeline().
 Use(gateway.ContextMiddleware()).
 Use(obsMw.Handler).
 Use(metrics.MetricsMiddleware).
 Use(limits.Handler).
+Use(bulkheadMw.Handler).
+Use(dedupMw.Handler).
 Use(auth.Handler).
 Use(security.Handler).
 Use(func(next http.Handler) http.Handler {
 return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// Rate limiting local
 if !limiter.Allow(r.RemoteAddr) {
 gateway.WriteError(w, gateway.NewRateLimitedError("too many requests"))
 return
+}
+// Rate limiting distribuido (si hay Redis)
+if distLimiter != nil {
+allowed, _, err := distLimiter.Allow(r.Context(), r.RemoteAddr, 100, time.Minute)
+if err != nil || !allowed {
+gateway.WriteError(w, gateway.NewRateLimitedError("too many requests"))
+return
+}
 }
 next.ServeHTTP(w, r)
 })
@@ -163,6 +200,7 @@ signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
 go func() {
 log.Printf("✅ Gateway en http://localhost:%s", *port)
+log.Printf("   Pipeline V2.4: context → obs → metrics → limits → bulkhead → dedup → auth → security → ratelimit → quota → cache → cost → engine")
 if err := gatewaySrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 log.Fatalf("❌ Gateway error: %v", err)
 }
@@ -170,8 +208,6 @@ log.Fatalf("❌ Gateway error: %v", err)
 
 go func() {
 log.Printf("✅ Control Plane en http://localhost:%s", *adminPort)
-log.Printf("   API v1: http://localhost:%s/v1/...", *adminPort)
-log.Printf("   Legacy: http://localhost:%s/admin/... (deprecated)", *adminPort)
 if err := adminSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 log.Fatalf("❌ Admin error: %v", err)
 }
@@ -194,6 +230,9 @@ gatewaySrv.Shutdown(ctx)
 adminSrv.Shutdown(ctx)
 metricsSrv.Shutdown(ctx)
 p.Stop()
+if redisClient != nil {
+redisClient.Close()
+}
 
 log.Println("✅ SentinelFlow detenido correctamente")
 }
