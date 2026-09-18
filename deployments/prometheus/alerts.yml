@@ -1,0 +1,114 @@
+groups:
+  - name: sentinelflow_slos
+    interval: 30s
+    rules:
+      # === SLO: Availability 99.9% ===
+      - alert: SentinelFlowHighErrorRate
+        expr: |
+          sum(rate(sentinelflow_requests_total{status=~"5.."}[5m]))
+          /
+          sum(rate(sentinelflow_requests_total[5m])) > 0.001
+        for: 5m
+        labels:
+          severity: critical
+          slo: availability
+        annotations:
+          summary: "Error rate > 0.1% (SLO violation)"
+          description: "Error rate is {{ $value | humanizePercentage }}"
+          runbook: "https://github.com/lecodev-26/sentinelflow/docs/runbooks/high-error-rate"
+
+      # === SLO: Latency P95 < 1s ===
+      - alert: SentinelFlowHighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(sentinelflow_request_duration_seconds_bucket[5m])) by (le)
+          ) > 1
+        for: 5m
+        labels:
+          severity: warning
+          slo: latency
+        annotations:
+          summary: "P95 latency > 1s"
+          description: "P95 latency is {{ $value }}s"
+
+      # === Provider down ===
+      - alert: SentinelFlowProviderDown
+        expr: |
+          sentinel_provider_status{status="unhealthy"} == 1
+        for: 2m
+        labels:
+          severity: critical
+          component: provider
+        annotations:
+          summary: "Provider {{ $labels.provider }} unhealthy"
+          description: "Provider {{ $labels.provider }} has been unhealthy for 2m"
+
+      # === Circuit breaker open ===
+      - alert: SentinelFlowCircuitBreakerOpen
+        expr: |
+          sentinel_circuit_breaker_state == 1
+        for: 5m
+        labels:
+          severity: warning
+          component: circuit_breaker
+        annotations:
+          summary: "Circuit breaker OPEN for {{ $labels.provider }}"
+          description: "Circuit breaker has been open for 5m"
+
+      # === Budget alert ===
+      - alert: SentinelFlowBudgetAlert
+        expr: |
+          sentinelflow_tenant_budget_percent > 80
+        for: 1m
+        labels:
+          severity: warning
+          component: cost
+        annotations:
+          summary: "Budget {{ $labels.tenant }} at {{ $value }}%"
+          description: "Tenant {{ $labels.tenant }} has used {{ $value }}% of monthly budget"
+
+      # === Redis down ===
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: redis
+        annotations:
+          summary: "Redis is down"
+          description: "Redis has been down for 1m"
+
+      # === Rate limiting ===
+      - alert: SentinelFlowHighRateLimit
+        expr: |
+          sum(rate(sentinelflow_ratelimit_hits_total[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: ratelimit
+        annotations:
+          summary: "High rate limiting detected"
+          description: "{{ $value }} rate limit hits/s"
+
+      # === Memory usage ===
+      - alert: SentinelFlowHighMemory
+        expr: |
+          (go_memstats_heap_alloc_bytes / 1024 / 1024) > 500
+        for: 10m
+        labels:
+          severity: warning
+          component: memory
+        annotations:
+          summary: "High memory usage"
+          description: "Heap usage {{ $value }}MB"
+
+      # === Goroutines leak ===
+      - alert: SentinelFlowGoroutineLeak
+        expr: go_goroutines > 1000
+        for: 10m
+        labels:
+          severity: warning
+          component: goroutines
+        annotations:
+          summary: "Potential goroutine leak"
+          description: "{{ $value }} goroutines running"

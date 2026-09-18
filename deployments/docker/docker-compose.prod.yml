@@ -1,0 +1,183 @@
+version: '3.8'
+
+services:
+  sentinelflow:
+    image: sentinelflow:2.10.0
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: sentinelflow
+    restart: always
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+      - "9090:9090"
+    environment:
+      - SENTINELFLOW_ENV=production
+      - SENTINELFLOW_VAULT_KEY=${SENTINELFLOW_VAULT_KEY}
+      - REDIS_URL=redis://redis-sentinel:26379
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - DB_PATH=/data/sentinelflow.db
+    volumes:
+      - sentinelflow-data:/data
+      - ./configs:/configs:ro
+    depends_on:
+      - redis-master
+      - redis-replica-1
+      - redis-replica-2
+      - redis-sentinel
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    networks:
+      - sentinelflow-net
+
+  # === REDIS HA ===
+  redis-master:
+    image: redis:7-alpine
+    container_name: redis-master
+    restart: always
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis-master-data:/data
+    networks:
+      - sentinelflow-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  redis-replica-1:
+    image: redis:7-alpine
+    container_name: redis-replica-1
+    restart: always
+    command: redis-server --appendonly yes --replicaof redis-master 6379 --masterauth ${REDIS_PASSWORD} --requirepass ${REDIS_PASSWORD}
+    depends_on:
+      - redis-master
+    volumes:
+      - redis-replica-1-data:/data
+    networks:
+      - sentinelflow-net
+
+  redis-replica-2:
+    image: redis:7-alpine
+    container_name: redis-replica-2
+    restart: always
+    command: redis-server --appendonly yes --replicaof redis-master 6379 --masterauth ${REDIS_PASSWORD} --requirepass ${REDIS_PASSWORD}
+    depends_on:
+      - redis-master
+    volumes:
+      - redis-replica-2-data:/data
+    networks:
+      - sentinelflow-net
+
+  redis-sentinel:
+    image: redis:7-alpine
+    container_name: redis-sentinel
+    restart: always
+    ports:
+      - "26379:26379"
+    command: >
+      sh -c "echo 'port 26379
+      sentinel monitor mymaster redis-master 6379 2
+      sentinel auth-pass mymaster ${REDIS_PASSWORD}
+      sentinel down-after-milliseconds mymaster 5000
+      sentinel parallel-syncs mymaster 1
+      sentinel failover-timeout mymaster 10000' > /etc/sentinel.conf &&
+      redis-sentinel /etc/sentinel.conf"
+    depends_on:
+      - redis-master
+      - redis-replica-1
+      - redis-replica-2
+    networks:
+      - sentinelflow-net
+
+  # === MONITORING ===
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: always
+    ports:
+      - "9091:9090"
+    volumes:
+      - ../prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    networks:
+      - sentinelflow-net
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - sentinelflow-net
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: alertmanager
+    restart: always
+    ports:
+      - "9093:9093"
+    volumes:
+      - ../alertmanager:/etc/alertmanager:ro
+    networks:
+      - sentinelflow-net
+
+  # === BACKUP ===
+  backup:
+    image: alpine:latest
+    container_name: sentinelflow-backup
+    restart: always
+    command: >
+      sh -c "apk add --no-cache sqlite &&
+      while true; do
+        sleep 3600;
+        mkdir -p /backups;
+        sqlite3 /data/sentinelflow.db \".backup /backups/sentinelflow-$$(date +%Y%m%d-%H%M%S).db\";
+        find /backups -name 'sentinelflow-*.db' -mtime +7 -delete;
+        echo \"Backup completado: $$(date)\";
+      done"
+    volumes:
+      - sentinelflow-data:/data:ro
+      - backup-data:/backups
+    depends_on:
+      - sentinelflow
+    networks:
+      - sentinelflow-net
+
+volumes:
+  sentinelflow-data:
+  redis-master-data:
+  redis-replica-1-data:
+  redis-replica-2-data:
+  prometheus-data:
+  grafana-data:
+  backup-data:
+
+networks:
+  sentinelflow-net:
+    driver: bridge
