@@ -245,3 +245,8 @@ if p.healthMonitor != nil {
 p.healthMonitor.Stop()
 }
 }
+
+// GetModelRegistry devuelve el registry de modelos
+func (p *Proxy) GetModelRegistry() *model.Registry {
+return p.modelRegistry
+}

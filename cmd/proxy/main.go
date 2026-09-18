@@ -11,9 +11,9 @@ import (
 "time"
 
 "github.com/gorilla/mux"
+"github.com/lecodev-26/sentinelflow/internal/accounting"
 "github.com/lecodev-26/sentinelflow/internal/audit"
 "github.com/lecodev-26/sentinelflow/internal/controlplane"
-"github.com/lecodev-26/sentinelflow/internal/cost"
 "github.com/lecodev-26/sentinelflow/internal/gateway"
 "github.com/lecodev-26/sentinelflow/internal/logger"
 "github.com/lecodev-26/sentinelflow/internal/metrics"
@@ -24,7 +24,7 @@ import (
 "github.com/redis/go-redis/v9"
 )
 
-const Version = "2.4.0"
+const Version = "2.5.0"
 
 func main() {
 port := flag.String("port", "8080", "Puerto del proxy")
@@ -86,13 +86,17 @@ if redisClient != nil {
 distLimiter = ratelimit.NewDistributedLimiterV2(redisClient, "sf:ratelimit")
 }
 
-// Cost tracker
-costTracker := cost.NewCostTracker()
-costTracker.SetBudget("default", 100.0)
-costTracker.SetAlertCallback(func(tenantID string, threshold int, budget *cost.Budget) {
-logger.Warnf("🚨 BUDGET ALERT: tenant=%s threshold=%d%% used=$%.2f/%.2f",
-tenantID, threshold, budget.Used, budget.MonthlyLimit)
+// === ACCOUNTING V2.5 ===
+pricingEngine := accounting.NewPricingEngine(p.GetModelRegistry())
+
+budgetEngine := accounting.NewBudgetEngine(func(alert accounting.BudgetAlert) {
+logger.Warnf("🚨 BUDGET ALERT: tenant=%s threshold=%d%% spent=$%.2f/%.2f forecast=$%.2f",
+alert.TenantID, alert.Threshold, alert.Spent, alert.Limit, alert.Forecast)
 })
+budgetEngine.SetBudget("default", 100.0)
+
+accountingSvc := accounting.NewService(pricingEngine, budgetEngine)
+logger.Info("💰 Accounting service iniciado")
 
 // Audit
 audit.SubscribeAll(&audit.LoggerWriter{})
@@ -111,12 +115,14 @@ security := gateway.NewSecurityMiddleware(false)
 cacheMw := gateway.NewCacheMiddleware(true, 5*time.Minute)
 quotaMw := gateway.NewQuotaMiddleware(true)
 quotaMw.SetQuota("default", gateway.DefaultQuota())
-costMw := gateway.NewCostMiddleware(costTracker, true)
 obsMw := gateway.NewObservabilityMiddleware(false)
 dedupMw := gateway.NewDedupMiddleware(true)
 bulkheadMw := gateway.NewBulkheadMiddleware(200, 5*time.Second)
 
-// Pipeline completo V2.4
+// Accounting middleware V2.5
+accountingMw := gateway.NewAccountingMiddleware(accountingSvc, true)
+
+// Pipeline completo V2.5
 pipeline := gateway.NewPipeline().
 Use(gateway.ContextMiddleware()).
 Use(obsMw.Handler).
@@ -128,12 +134,10 @@ Use(auth.Handler).
 Use(security.Handler).
 Use(func(next http.Handler) http.Handler {
 return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-// Rate limiting local
 if !limiter.Allow(r.RemoteAddr) {
 gateway.WriteError(w, gateway.NewRateLimitedError("too many requests"))
 return
 }
-// Rate limiting distribuido (si hay Redis)
 if distLimiter != nil {
 allowed, _, err := distLimiter.Allow(r.Context(), r.RemoteAddr, 100, time.Minute)
 if err != nil || !allowed {
@@ -146,7 +150,7 @@ next.ServeHTTP(w, r)
 }).
 Use(quotaMw.Handler).
 Use(cacheMw.Handler).
-Use(costMw.Handler)
+Use(accountingMw.Handler)
 
 mainHandler := pipeline.Then(p.Handler())
 
@@ -200,7 +204,7 @@ signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
 go func() {
 log.Printf("✅ Gateway en http://localhost:%s", *port)
-log.Printf("   Pipeline V2.4: context → obs → metrics → limits → bulkhead → dedup → auth → security → ratelimit → quota → cache → cost → engine")
+log.Printf("   Pipeline V2.5: context → obs → metrics → limits → bulkhead → dedup → auth → security → ratelimit → quota → cache → accounting → engine")
 if err := gatewaySrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 log.Fatalf("❌ Gateway error: %v", err)
 }
