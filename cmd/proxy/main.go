@@ -18,6 +18,8 @@ import (
 "github.com/lecodev-26/sentinelflow/internal/logger"
 "github.com/lecodev-26/sentinelflow/internal/metrics"
 "github.com/lecodev-26/sentinelflow/internal/observability"
+"github.com/lecodev-26/sentinelflow/internal/observability/analytics"
+"github.com/lecodev-26/sentinelflow/internal/observability/traces"
 "github.com/lecodev-26/sentinelflow/internal/proxy"
 "github.com/lecodev-26/sentinelflow/internal/ratelimit"
 "github.com/lecodev-26/sentinelflow/internal/rbac"
@@ -25,7 +27,7 @@ import (
 "github.com/redis/go-redis/v9"
 )
 
-const Version = "2.6.0"
+const Version = "2.7.0"
 
 func main() {
 port := flag.String("port", "8080", "Puerto del proxy")
@@ -45,7 +47,7 @@ if err := observability.InitTracing("sentinelflow", ""); err != nil {
 log.Printf("⚠️ Tracing no disponible: %v", err)
 }
 
-// === STORAGE PERSISTENTE ===
+// === STORAGE ===
 store, err := sqlite.NewStore(*dbPath)
 if err != nil {
 log.Fatalf("❌ Error abriendo base de datos: %v", err)
@@ -57,12 +59,19 @@ log.Fatalf("❌ Error aplicando migraciones: %v", err)
 }
 log.Printf("✅ Base de datos lista: %s", *dbPath)
 
+// === OBSERVABILITY V2.7 ===
+traceStore := traces.NewStore(10000)
+providerAnalytics := analytics.NewProviderAnalytics()
+routingAnalytics := analytics.NewRoutingAnalytics(10000)
+costAnalytics := analytics.NewCostAnalytics()
+logger.Info("🔍 Observability avanzada iniciada")
+
 p, err := proxy.NewProxy(*configFile)
 if err != nil {
 log.Fatalf("❌ Error creando proxy: %v", err)
 }
 
-// RBAC (en memoria por ahora, pero integrado con storage)
+// RBAC
 orgMgr := rbac.NewOrganizationManager()
 userMgr := rbac.NewUserManager(orgMgr)
 
@@ -100,7 +109,7 @@ if redisClient != nil {
 distLimiter = ratelimit.NewDistributedLimiterV2(redisClient, "sf:ratelimit")
 }
 
-// === ACCOUNTING ===
+// Accounting
 pricingEngine := accounting.NewPricingEngine(p.GetModelRegistry())
 budgetEngine := accounting.NewBudgetEngine(func(alert accounting.BudgetAlert) {
 logger.Warnf("🚨 BUDGET ALERT: tenant=%s threshold=%d%% spent=$%.2f/%.2f forecast=$%.2f",
@@ -132,7 +141,7 @@ dedupMw := gateway.NewDedupMiddleware(true)
 bulkheadMw := gateway.NewBulkheadMiddleware(200, 5*time.Second)
 accountingMw := gateway.NewAccountingMiddleware(accountingSvc, true)
 
-// Pipeline completo V2.6
+// Pipeline completo V2.7
 pipeline := gateway.NewPipeline().
 Use(gateway.ContextMiddleware()).
 Use(obsMw.Handler).
@@ -182,7 +191,7 @@ adminRouter.Use(corsMiddleware)
 orgHandler := controlplane.NewOrganizationHandler(orgMgr)
 userHandler := controlplane.NewUserHandler(userMgr)
 providerHandler := controlplane.NewProviderHandler(p)
-metricsHandler := controlplane.NewMetricsHandler(p)
+metricsHandler := controlplane.NewMetricsHandler(p, traceStore, providerAnalytics, routingAnalytics, costAnalytics)
 
 cpRouter := controlplane.NewRouter(orgHandler, userHandler, providerHandler, metricsHandler)
 cpRouter.Register(adminRouter)
@@ -214,7 +223,7 @@ signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
 go func() {
 log.Printf("✅ Gateway en http://localhost:%s", *port)
-log.Printf("   Pipeline V2.6: context → obs → metrics → limits → bulkhead → dedup → auth → security → ratelimit → quota → cache → accounting → engine")
+log.Printf("   Pipeline V2.7: context → obs → metrics → limits → bulkhead → dedup → auth → security → ratelimit → quota → cache → accounting → engine")
 if err := gatewaySrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 log.Fatalf("❌ Gateway error: %v", err)
 }
@@ -222,6 +231,12 @@ log.Fatalf("❌ Gateway error: %v", err)
 
 go func() {
 log.Printf("✅ Control Plane en http://localhost:%s", *adminPort)
+log.Printf("   Nuevos endpoints V2.7:")
+log.Printf("   GET /v1/traces                  - Listar traces")
+log.Printf("   GET /v1/traces/{id}             - Ver trace completo")
+log.Printf("   GET /v1/metrics/providers/analytics - Analytics de providers")
+log.Printf("   GET /v1/metrics/routing/analytics   - Analytics de routing")
+log.Printf("   GET /v1/metrics/costs                - Analytics de costes")
 if err := adminSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 log.Fatalf("❌ Admin error: %v", err)
 }

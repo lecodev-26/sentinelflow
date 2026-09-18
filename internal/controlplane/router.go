@@ -6,7 +6,6 @@ import (
 "github.com/gorilla/mux"
 )
 
-// Router agrupa todos los handlers del control plane
 type Router struct {
 orgs      *OrganizationHandler
 users     *UserHandler
@@ -14,7 +13,6 @@ providers *ProviderHandler
 metrics   *MetricsHandler
 }
 
-// NewRouter crea el router completo del control plane
 func NewRouter(
 orgs *OrganizationHandler,
 users *UserHandler,
@@ -31,12 +29,10 @@ metrics:   metrics,
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 w.Header().Set("Content-Type", "application/json")
-w.Write([]byte(`{"status":"ok","service":"sentinelflow-control-plane","version":"2.0.0"}`))
+w.Write([]byte(`{"status":"ok","service":"sentinelflow-control-plane","version":"2.7.0"}`))
 }
 
-// Register registra todas las rutas con versionado v1
 func (r *Router) Register(router *mux.Router) {
-// Version 1 del API
 v1 := router.PathPrefix("/v1").Subrouter()
 v1.HandleFunc("/organizations", r.orgs.List).Methods("GET")
 v1.HandleFunc("/organizations", r.orgs.Create).Methods("POST")
@@ -56,12 +52,16 @@ v1.HandleFunc("/metrics/security", r.metrics.Security).Methods("GET")
 v1.HandleFunc("/metrics/routing", r.metrics.Routing).Methods("GET")
 v1.HandleFunc("/metrics/timeseries", r.metrics.Timeseries).Methods("GET")
 v1.HandleFunc("/metrics/system", r.metrics.System).Methods("GET")
+v1.HandleFunc("/metrics/providers/analytics", r.metrics.ProviderAnalytics).Methods("GET")
+v1.HandleFunc("/metrics/routing/analytics", r.metrics.RoutingAnalytics).Methods("GET")
+v1.HandleFunc("/metrics/costs", r.metrics.Costs).Methods("GET")
+v1.HandleFunc("/traces", r.metrics.ListTraces).Methods("GET")
+v1.HandleFunc("/traces/{id}", r.metrics.GetTrace).Methods("GET")
 v1.HandleFunc("/models", r.metrics.Models).Methods("GET")
 
-// Health (sin versión)
 router.HandleFunc("/health", healthHandler).Methods("GET")
 
-// Alias legacy /admin/* (deprecated, será removido en v3.0)
+// Alias legacy
 admin := router.PathPrefix("/admin").Subrouter()
 admin.HandleFunc("/organizations", r.orgs.List).Methods("GET")
 admin.HandleFunc("/organizations", r.orgs.Create).Methods("POST")
@@ -81,6 +81,11 @@ admin.HandleFunc("/metrics/security", r.metrics.Security).Methods("GET")
 admin.HandleFunc("/metrics/routing", r.metrics.Routing).Methods("GET")
 admin.HandleFunc("/metrics/timeseries", r.metrics.Timeseries).Methods("GET")
 admin.HandleFunc("/metrics/system", r.metrics.System).Methods("GET")
+admin.HandleFunc("/metrics/providers/analytics", r.metrics.ProviderAnalytics).Methods("GET")
+admin.HandleFunc("/metrics/routing/analytics", r.metrics.RoutingAnalytics).Methods("GET")
+admin.HandleFunc("/metrics/costs", r.metrics.Costs).Methods("GET")
+admin.HandleFunc("/traces", r.metrics.ListTraces).Methods("GET")
+admin.HandleFunc("/traces/{id}", r.metrics.GetTrace).Methods("GET")
 admin.HandleFunc("/models", r.metrics.Models).Methods("GET")
 admin.HandleFunc("/health", healthHandler).Methods("GET")
 }
