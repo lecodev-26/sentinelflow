@@ -6,21 +6,20 @@ import (
 "fmt"
 "time"
 
-gwcontext "github.com/lecodev-26/sentinelflow/internal/gateway/context"
 "github.com/lecodev-26/sentinelflow/internal/events"
+gwcontext "github.com/lecodev-26/sentinelflow/internal/gateway/context"
 "github.com/lecodev-26/sentinelflow/internal/logger"
 "github.com/lecodev-26/sentinelflow/internal/provider"
 "github.com/lecodev-26/sentinelflow/internal/router"
 )
 
 // Executor es el corazón del gateway.
-// Recibe un Request normalizado y devuelve un Response normalizado.
 type Executor struct {
-router *router.ResilientRouter
+router *router.IntelligentRouter
 }
 
 // NewExecutor crea un nuevo Executor
-func NewExecutor(r *router.ResilientRouter) *Executor {
+func NewExecutor(r *router.IntelligentRouter) *Executor {
 return &Executor{router: r}
 }
 
@@ -45,7 +44,7 @@ return nil, 400, err
 rc.Model = chatReq.Model
 rc.Stream = chatReq.Stream
 
-// Ejecutar con el router resiliente
+// Ejecutar con el router inteligente
 events.Publish(ctx, events.Event{
 Type:      events.EventProviderStarted,
 RequestID: rc.RequestID,

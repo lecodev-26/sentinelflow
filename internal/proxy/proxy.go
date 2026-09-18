@@ -17,12 +17,13 @@ gwcontext "github.com/lecodev-26/sentinelflow/internal/gateway/context"
 "github.com/lecodev-26/sentinelflow/internal/provider/model"
 "github.com/lecodev-26/sentinelflow/internal/provider/registry"
 "github.com/lecodev-26/sentinelflow/internal/router"
+"github.com/lecodev-26/sentinelflow/internal/router/scoring"
 )
 
 type Proxy struct {
 config        *config.Config
 registry      *registry.Registry
-router        *router.ResilientRouter
+router        *router.IntelligentRouter
 executor      *gateway.Executor
 healthMonitor *health.Monitor
 modelRegistry *model.Registry
@@ -58,19 +59,13 @@ logger.Infof("✅ Provider registrado: %s", p.Name)
 
 // Model registry
 modelReg := model.NewRegistry()
-
-// 1. Cargar catálogo por defecto
 for _, m := range model.DefaultCatalog() {
 modelReg.Register(m)
 }
 logger.Infof("📦 Catálogo por defecto: %d modelos", len(modelReg.List()))
 
-// 2. Intentar discovery dinámico en background
+// Discovery en background
 go discoverModels(modelReg)
-
-// Resilient router con circuit breakers
-cbCfg := router.DefaultCBConfig()
-resilientRouter := router.NewResilientRouter(reg, cbCfg)
 
 // Health monitor
 healthMonitor := health.NewMonitor(30*time.Second, 5*time.Second)
@@ -80,31 +75,34 @@ healthMonitor.Register(p)
 healthMonitor.Start(nil)
 logger.Info("❤️ Health monitor iniciado")
 
+// Intelligent router
+cbCfg := router.DefaultCBConfig()
+weights := scoring.DefaultWeights()
+intelligentRouter := router.NewIntelligentRouter(reg, modelReg, healthMonitor, weights, cbCfg)
+logger.Info("🧠 Intelligent router iniciado")
+
 // Executor
-executor := gateway.NewExecutor(resilientRouter)
+executor := gateway.NewExecutor(intelligentRouter)
 
 return &Proxy{
 config:        cfg,
 registry:      reg,
-router:        resilientRouter,
+router:        intelligentRouter,
 executor:      executor,
 healthMonitor: healthMonitor,
 modelRegistry: modelReg,
 }, nil
 }
 
-// discoverModels intenta descubrir modelos dinámicamente
 func discoverModels(reg *model.Registry) {
 ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 defer cancel()
 
 discovery := model.NewDiscovery()
 
-// OpenAI
 if apiKey := os.Getenv("OPENAI_API_KEY"); apiKey != "" {
 if models, err := discovery.DiscoverOpenAI(ctx, apiKey, ""); err == nil {
 for _, m := range models {
-// Mantener pricing del catálogo estático si existe
 if existing, ok := reg.Get("openai", m.ID); ok {
 m.Pricing = existing.Pricing
 m.Limits = existing.Limits
@@ -113,19 +111,14 @@ m.Capabilities = existing.Capabilities
 reg.Register(m)
 }
 logger.Infof("🔍 OpenAI discovery: %d modelos", len(models))
-} else {
-logger.Warnf("⚠️ OpenAI discovery falló: %v", err)
 }
 }
 
-// Ollama
 if models, err := discovery.DiscoverOllama(ctx, "http://localhost:11434"); err == nil {
 for _, m := range models {
 reg.Register(m)
 }
 logger.Infof("🔍 Ollama discovery: %d modelos", len(models))
-} else {
-logger.Warnf("⚠️ Ollama discovery falló: %v", err)
 }
 }
 
@@ -208,12 +201,10 @@ return map[string]interface{}{
 }
 }
 
-// GetModels devuelve todos los modelos registrados
 func (p *Proxy) GetModels() []*model.Model {
 return p.modelRegistry.List()
 }
 
-// GetModelsByCapability devuelve modelos con una capacidad
 func (p *Proxy) GetModelsByCapability(cap model.Capability) []*model.Model {
 return p.modelRegistry.FindByCapability(cap)
 }
