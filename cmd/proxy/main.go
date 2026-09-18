@@ -11,6 +11,7 @@ import (
 "time"
 
 "github.com/gorilla/mux"
+"github.com/lecodev-26/sentinelflow/internal/audit"
 "github.com/lecodev-26/sentinelflow/internal/controlplane"
 "github.com/lecodev-26/sentinelflow/internal/cost"
 "github.com/lecodev-26/sentinelflow/internal/gateway"
@@ -68,6 +69,10 @@ costTracker.SetAlertCallback(func(tenantID string, threshold int, budget *cost.B
 logger.Warnf("🚨 BUDGET ALERT: tenant=%s threshold=%d%% used=$%.2f/%.2f",
 tenantID, threshold, budget.Used, budget.MonthlyLimit)
 })
+
+// Audit: suscribir al bus de eventos
+audit.SubscribeAll(&audit.LoggerWriter{})
+logger.Info("📝 Audit system iniciado")
 
 // Middlewares
 limiter := ratelimit.NewLimiter(100, time.Minute)
