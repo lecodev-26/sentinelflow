@@ -8,13 +8,11 @@ import (
 "github.com/lecodev-26/sentinelflow/internal/security/prompt"
 )
 
-// Scanner es un detector de seguridad
 type Scanner interface {
 Name() string
 Scan(ctx context.Context, text string) []Finding
 }
 
-// Pipeline ejecuta todos los scanners
 type Pipeline struct {
 scanners []Scanner
 }
@@ -26,16 +24,15 @@ scanners: []Scanner{
 NewPIIScanner(),
 NewSecretScanner(),
 NewPromptInjectionScanner(),
+NewSSRFScanner(),
 },
 }
 }
 
-// Register añade un scanner
 func (p *Pipeline) Register(s Scanner) {
 p.scanners = append(p.scanners, s)
 }
 
-// Evaluate evalúa un texto con todos los scanners
 func (p *Pipeline) Evaluate(ctx context.Context, text string) *Decision {
 decision := NewDecision()
 
@@ -46,7 +43,6 @@ decision.AddFinding(f)
 }
 }
 
-// Si hay redacción, generar el texto procesado
 if decision.Action == ActionRedact {
 decision.ProcessedText = redactText(text, decision.Findings)
 }
@@ -54,9 +50,7 @@ decision.ProcessedText = redactText(text, decision.Findings)
 return decision
 }
 
-// redactText redacta todas las coincidencias en el texto
 func redactText(text string, findings []Finding) string {
-// Ordenar de derecha a izquierda para no alterar índices
 type indexed struct {
 start, end int
 }
@@ -67,7 +61,6 @@ indexes = append(indexes, indexed{f.Start, f.End})
 }
 }
 
-// Ordenar de derecha a izquierda
 for i := 0; i < len(indexes); i++ {
 for j := i + 1; j < len(indexes); j++ {
 if indexes[j].start > indexes[i].start {
