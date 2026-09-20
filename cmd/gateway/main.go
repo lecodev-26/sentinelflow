@@ -16,6 +16,8 @@ import (
 "github.com/lecodev-26/sentinelflow/internal/gateway/v3/normalizer"
 "github.com/lecodev-26/sentinelflow/internal/identity"
 "github.com/lecodev-26/sentinelflow/internal/logger"
+providers "github.com/lecodev-26/sentinelflow/internal/providers/v3"
+"github.com/lecodev-26/sentinelflow/internal/providers/v3/adapters"
 "github.com/lecodev-26/sentinelflow/internal/storage/postgres"
 "github.com/lecodev-26/sentinelflow/internal/version"
 )
@@ -33,7 +35,7 @@ Format: "json",
 Output: "stdout",
 })
 
-// Conectar a PostgreSQL para auth
+// PostgreSQL
 dbURL := os.Getenv("SENTINELFLOW_DATABASE_URL")
 if dbURL == "" {
 log.Fatalf("❌ SENTINELFLOW_DATABASE_URL is required")
@@ -50,6 +52,44 @@ defer pgClient.Close()
 
 log.Printf("✅ PostgreSQL conectado")
 
+// Provider Registry V3
+registry := providers.NewRegistry()
+
+// Registrar providers si tienen credenciales
+if apiKey := os.Getenv("OPENAI_API_KEY"); apiKey != "" {
+if err := registry.Register(adapters.NewOpenAIAdapter(apiKey, "")); err != nil {
+log.Printf("⚠️ Error registrando OpenAI: %v", err)
+} else {
+log.Printf("✅ Provider registrado: openai")
+}
+} else {
+log.Printf("⚠️ OPENAI_API_KEY no configurada, OpenAI no disponible")
+}
+
+if apiKey := os.Getenv("ANTHROPIC_API_KEY"); apiKey != "" {
+if err := registry.Register(adapters.NewAnthropicAdapter(apiKey, "")); err != nil {
+log.Printf("⚠️ Error registrando Anthropic: %v", err)
+} else {
+log.Printf("✅ Provider registrado: anthropic")
+}
+} else {
+log.Printf("⚠️ ANTHROPIC_API_KEY no configurada, Anthropic no disponible")
+}
+
+// Ollama siempre intenta (aunque no esté corriendo, fallará en health)
+if err := registry.Register(adapters.NewOllamaAdapter("")); err != nil {
+log.Printf("⚠️ Error registrando Ollama: %v", err)
+} else {
+log.Printf("✅ Provider registrado: ollama (puede no estar disponible)")
+}
+
+// Manager con health + circuit breaker
+manager := providers.NewManager(registry)
+manager.Start(context.Background())
+defer manager.Stop()
+
+log.Printf("📊 Providers registrados: %d", registry.Count())
+
 // Services
 identitySvc := identity.NewService(pgClient)
 authEnabled := os.Getenv("SENTINELFLOW_ENV") == "production"
@@ -65,7 +105,7 @@ r := mux.NewRouter()
 // Health
 r.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
 w.Header().Set("Content-Type", "application/json")
-w.Write([]byte(`{"status":"ok","service":"sentinelflow-gateway","version":"` + version.String() + `","auth_enabled":` + boolToStr(authEnabled) + `}`))
+w.Write([]byte(`{"status":"ok","service":"sentinelflow-gateway","version":"` + version.String() + `","auth_enabled":` + boolToStr(authEnabled) + `,"providers":` + intToStr(registry.Count()) + `}`))
 }).Methods("GET")
 
 // Version
@@ -75,9 +115,16 @@ info := version.Get()
 w.Write([]byte(`{"version":"` + info.Version + `","commit":"` + info.Commit + `"}`))
 }).Methods("GET")
 
-// Chat completions con auth + idempotency + normalizer
+// Providers status
+r.HandleFunc("/v1/providers", func(w http.ResponseWriter, req *http.Request) {
+w.Header().Set("Content-Type", "application/json")
+json.NewEncoder(w).Encode(map[string]interface{}{
+"providers": manager.HealthStatus(),
+})
+}).Methods("GET")
+
+// Chat completions
 chatHandler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-// Leer body
 body, err := io.ReadAll(req.Body)
 if err != nil {
 writeError(w, http.StatusBadRequest, "invalid_request", "error reading body")
@@ -92,7 +139,6 @@ writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 return
 }
 
-// Extraer tenant del contexto (inyectado por auth middleware)
 tenantID := middleware.GetTenantID(req.Context())
 userID := middleware.GetUserID(req.Context())
 apiKeyID := middleware.GetAPIKeyID(req.Context())
@@ -100,41 +146,70 @@ apiKeyID := middleware.GetAPIKeyID(req.Context())
 logger.Infof("📨 Request: tenant=%s user=%s format=%s model=%s stream=%v",
 tenantID, userID, format, normReq.Model, normReq.Stream)
 
-// TODO V3.3: routing + provider execution
-// Por ahora placeholder
-_ = normalizerSvc
+// Convertir a ChatRequest V3
+chatReq := &providers.ChatRequest{
+Model:       normReq.Model,
+Temperature: normReq.Temperature,
+MaxTokens:   normReq.MaxTokens,
+Stream:      normReq.Stream,
+}
+for _, m := range normReq.Messages {
+chatReq.Messages = append(chatReq.Messages, providers.Message{
+Role:    m.Role,
+Content: m.Content,
+})
+}
+
+// Seleccionar provider (simple: por modelo)
+provider := selectProvider(manager, normReq.Model)
+if provider == nil {
+writeError(w, http.StatusServiceUnavailable, "no_provider", "no provider available for this model")
+return
+}
+
+logger.Infof("🎯 Provider seleccionado: %s", provider.ID())
+
+// Health/CB check
+cb := manager.GetBreaker(provider.ID())
+if !cb.Allow() {
+writeError(w, http.StatusServiceUnavailable, "circuit_open", "circuit breaker open")
+return
+}
+
+// Ejecutar (no streaming por ahora)
+if normReq.Stream {
+writeError(w, http.StatusNotImplemented, "not_implemented", "streaming coming in V3.3 step 8")
+return
+}
+
+resp, err := provider.Chat(req.Context(), chatReq)
+if err != nil {
+cb.RecordFailure()
+logger.Errorf("❌ Provider error: %v", err)
+writeError(w, http.StatusBadGateway, "provider_error", err.Error())
+return
+}
+
+cb.RecordSuccess()
 
 w.Header().Set("Content-Type", "application/json")
-w.Header().Set("X-Request-Format", string(format))
-w.Header().Set("X-Tenant-ID", tenantID)
-w.Header().Set("X-User-ID", userID)
-w.Header().Set("X-API-Key-ID", apiKeyID)
+w.Header().Set("X-Provider", provider.ID())
+w.Header().Set("X-Tenant-Id", tenantID)
+w.Header().Set("X-User-Id", userID)
+w.Header().Set("X-Api-Key-Id", apiKeyID)
 w.WriteHeader(http.StatusOK)
-
-json.NewEncoder(w).Encode(map[string]interface{}{
-"error": map[string]string{
-"type":    "not_implemented",
-"message": "Provider execution coming in V3.3",
-},
-"received": map[string]interface{}{
-"model":          normReq.Model,
-"messages_count": len(normReq.Messages),
-"stream":         normReq.Stream,
-"format":         string(format),
-},
-})
+json.NewEncoder(w).Encode(resp)
 })
 
 r.Handle("/v1/chat/completions",
 authMw.Handler(idempotencyMw.Handler(chatHandler)),
 ).Methods("POST")
 
-// Servidor
 srv := &http.Server{
 Addr:         ":8080",
 Handler:      r,
 ReadTimeout:  30 * time.Second,
-WriteTimeout: 30 * time.Second,
+WriteTimeout: 60 * time.Second,
 IdleTimeout:  60 * time.Second,
 }
 
@@ -144,7 +219,7 @@ signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 go func() {
 log.Printf("✅ Gateway en http://localhost:8080")
 log.Printf("   Auth: %v", authEnabled)
-log.Printf("   Pipeline: auth → idempotency → normalizer → [routing → provider]")
+log.Printf("   Providers: %d", registry.Count())
 if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 log.Fatalf("❌ Gateway error: %v", err)
 }
@@ -158,6 +233,49 @@ defer shutdownCancel()
 
 srv.Shutdown(shutdownCtx)
 log.Println("✅ Gateway detenido")
+}
+
+// selectProvider elige un provider según el modelo
+func selectProvider(manager *providers.Manager, model string) providers.Provider {
+available := manager.AvailableProviders()
+
+// Preferencias por modelo
+if len(available) == 0 {
+return nil
+}
+
+// gpt-* → OpenAI
+if len(model) >= 3 && model[:3] == "gpt" {
+for _, p := range available {
+if p.ID() == "openai" {
+return p
+}
+}
+}
+
+// claude-* → Anthropic
+if len(model) >= 6 && model[:6] == "claude" {
+for _, p := range available {
+if p.ID() == "anthropic" {
+return p
+}
+}
+}
+
+// llava, llama, mistral, qwen → Ollama
+localPrefixes := []string{"llama", "mistral", "qwen", "phi", "gemma", "llava"}
+for _, prefix := range localPrefixes {
+if len(model) >= len(prefix) && model[:len(prefix)] == prefix {
+for _, p := range available {
+if p.ID() == "ollama" {
+return p
+}
+}
+}
+}
+
+// Fallback: primer provider disponible
+return available[0]
 }
 
 func writeError(w http.ResponseWriter, status int, errType, message string) {
@@ -176,4 +294,20 @@ if b {
 return "true"
 }
 return "false"
+}
+
+func intToStr(n int) string {
+return json.Number(json.Number(time.Now().Format("05"))).String()[:0] + intToString(n)
+}
+
+func intToString(n int) string {
+if n == 0 {
+return "0"
+}
+var result []byte
+for n > 0 {
+result = append([]byte{byte('0' + n%10)}, result...)
+n /= 10
+}
+return string(result)
 }
