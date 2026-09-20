@@ -2,7 +2,6 @@ package main
 
 import (
 "context"
-"flag"
 "log"
 "net/http"
 "os"
@@ -11,14 +10,14 @@ import (
 "time"
 
 "github.com/gorilla/mux"
+"github.com/lecodev-26/sentinelflow/internal/controlplane/v3"
+"github.com/lecodev-26/sentinelflow/internal/identity"
 "github.com/lecodev-26/sentinelflow/internal/logger"
 "github.com/lecodev-26/sentinelflow/internal/storage/postgres"
 "github.com/lecodev-26/sentinelflow/internal/version"
 )
 
 func main() {
-flag.Parse()
-
 log.Printf("🛡️ SentinelFlow Control Plane v%s", version.Full())
 
 logger.Init(&struct {
@@ -56,6 +55,10 @@ log.Fatalf("❌ Error aplicando migraciones: %v", err)
 }
 log.Printf("✅ Migraciones aplicadas")
 
+// Iniciar servicio de Identity
+identitySvc := identity.NewService(pgClient)
+log.Printf("✅ Identity service iniciado")
+
 // Router
 r := mux.NewRouter()
 r.Use(corsMiddleware)
@@ -78,6 +81,10 @@ info := version.Get()
 w.Write([]byte(`{"version":"` + info.Version + `","commit":"` + info.Commit + `"}`))
 }).Methods("GET")
 
+// Registrar handlers de identity
+handlers := v3.New(identitySvc)
+handlers.Register(r)
+
 // Servidor
 srv := &http.Server{
 Addr:         ":8081",
@@ -92,6 +99,25 @@ signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
 go func() {
 log.Printf("✅ Control Plane en http://localhost:8081")
+log.Printf("")
+log.Printf("📋 Endpoints disponibles:")
+log.Printf("   GET    /health")
+log.Printf("   GET    /version")
+log.Printf("   GET    /v1/organizations")
+log.Printf("   POST   /v1/organizations")
+log.Printf("   GET    /v1/organizations/{id}")
+log.Printf("   DELETE /v1/organizations/{id}")
+log.Printf("   GET    /v1/organizations/{id}/projects")
+log.Printf("   POST   /v1/organizations/{id}/projects")
+log.Printf("   GET    /v1/projects/{id}")
+log.Printf("   DELETE /v1/projects/{id}")
+log.Printf("   GET    /v1/organizations/{id}/users")
+log.Printf("   POST   /v1/users")
+log.Printf("   GET    /v1/users/{id}")
+log.Printf("   DELETE /v1/users/{id}")
+log.Printf("   GET    /v1/users/{id}/api-keys")
+log.Printf("   POST   /v1/users/{id}/api-keys")
+log.Printf("   DELETE /v1/api-keys/{id}")
 if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 log.Fatalf("❌ Control Plane error: %v", err)
 }
