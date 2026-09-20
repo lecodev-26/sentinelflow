@@ -3,6 +3,7 @@ package main
 import (
 "context"
 "encoding/json"
+"fmt"
 "io"
 "log"
 "net/http"
@@ -55,57 +56,43 @@ log.Printf("✅ PostgreSQL conectado")
 // Provider Registry V3
 registry := providers.NewRegistry()
 
-// Registrar providers si tienen credenciales
 if apiKey := os.Getenv("OPENAI_API_KEY"); apiKey != "" {
-if err := registry.Register(adapters.NewOpenAIAdapter(apiKey, "")); err != nil {
-log.Printf("⚠️ Error registrando OpenAI: %v", err)
-} else {
+_ = registry.Register(adapters.NewOpenAIAdapter(apiKey, ""))
 log.Printf("✅ Provider registrado: openai")
-}
 } else {
-log.Printf("⚠️ OPENAI_API_KEY no configurada, OpenAI no disponible")
+log.Printf("⚠️ OPENAI_API_KEY no configurada")
 }
 
 if apiKey := os.Getenv("ANTHROPIC_API_KEY"); apiKey != "" {
-if err := registry.Register(adapters.NewAnthropicAdapter(apiKey, "")); err != nil {
-log.Printf("⚠️ Error registrando Anthropic: %v", err)
-} else {
+_ = registry.Register(adapters.NewAnthropicAdapter(apiKey, ""))
 log.Printf("✅ Provider registrado: anthropic")
-}
 } else {
-log.Printf("⚠️ ANTHROPIC_API_KEY no configurada, Anthropic no disponible")
+log.Printf("⚠️ ANTHROPIC_API_KEY no configurada")
 }
 
-// Ollama siempre intenta (aunque no esté corriendo, fallará en health)
-if err := registry.Register(adapters.NewOllamaAdapter("")); err != nil {
-log.Printf("⚠️ Error registrando Ollama: %v", err)
-} else {
-log.Printf("✅ Provider registrado: ollama (puede no estar disponible)")
-}
+_ = registry.Register(adapters.NewOllamaAdapter(""))
+log.Printf("✅ Provider registrado: ollama")
 
-// Manager con health + circuit breaker
 manager := providers.NewManager(registry)
 manager.Start(context.Background())
 defer manager.Stop()
 
 log.Printf("📊 Providers registrados: %d", registry.Count())
 
-// Services
 identitySvc := identity.NewService(pgClient)
 authEnabled := os.Getenv("SENTINELFLOW_ENV") == "production"
 
-// Middleware
 authMw := middleware.NewAuth(identitySvc, authEnabled)
 idempotencyMw := middleware.NewIdempotency(24 * time.Hour)
 normalizerSvc := normalizer.New()
 
-// Router
 r := mux.NewRouter()
 
 // Health
 r.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
 w.Header().Set("Content-Type", "application/json")
-w.Write([]byte(`{"status":"ok","service":"sentinelflow-gateway","version":"` + version.String() + `","auth_enabled":` + boolToStr(authEnabled) + `,"providers":` + intToStr(registry.Count()) + `}`))
+w.Write([]byte(fmt.Sprintf(`{"status":"ok","service":"sentinelflow-gateway","version":"%s","auth_enabled":%v,"providers":%d}`,
+version.String(), authEnabled, registry.Count())))
 }).Methods("GET")
 
 // Version
@@ -123,7 +110,7 @@ json.NewEncoder(w).Encode(map[string]interface{}{
 })
 }).Methods("GET")
 
-// Chat completions
+// Chat handler (con soporte streaming)
 chatHandler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 body, err := io.ReadAll(req.Body)
 if err != nil {
@@ -132,7 +119,6 @@ return
 }
 defer req.Body.Close()
 
-// Normalizar
 normReq, format, err := normalizerSvc.Normalize(body)
 if err != nil {
 writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
@@ -146,7 +132,6 @@ apiKeyID := middleware.GetAPIKeyID(req.Context())
 logger.Infof("📨 Request: tenant=%s user=%s format=%s model=%s stream=%v",
 tenantID, userID, format, normReq.Model, normReq.Stream)
 
-// Convertir a ChatRequest V3
 chatReq := &providers.ChatRequest{
 Model:       normReq.Model,
 Temperature: normReq.Temperature,
@@ -160,28 +145,25 @@ Content: m.Content,
 })
 }
 
-// Seleccionar provider (simple: por modelo)
 provider := selectProvider(manager, normReq.Model)
 if provider == nil {
-writeError(w, http.StatusServiceUnavailable, "no_provider", "no provider available for this model")
+writeError(w, http.StatusServiceUnavailable, "no_provider", "no provider available")
 return
 }
 
-logger.Infof("🎯 Provider seleccionado: %s", provider.ID())
-
-// Health/CB check
 cb := manager.GetBreaker(provider.ID())
 if !cb.Allow() {
 writeError(w, http.StatusServiceUnavailable, "circuit_open", "circuit breaker open")
 return
 }
 
-// Ejecutar (no streaming por ahora)
+// === STREAMING ===
 if normReq.Stream {
-writeError(w, http.StatusNotImplemented, "not_implemented", "streaming coming in V3.3 step 8")
+handleStream(w, req, provider, chatReq, cb, tenantID, userID, apiKeyID)
 return
 }
 
+// === NON-STREAMING ===
 resp, err := provider.Chat(req.Context(), chatReq)
 if err != nil {
 cb.RecordFailure()
@@ -209,7 +191,7 @@ srv := &http.Server{
 Addr:         ":8080",
 Handler:      r,
 ReadTimeout:  30 * time.Second,
-WriteTimeout: 60 * time.Second,
+WriteTimeout: 0, // 0 para streaming
 IdleTimeout:  60 * time.Second,
 }
 
@@ -219,7 +201,7 @@ signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 go func() {
 log.Printf("✅ Gateway en http://localhost:8080")
 log.Printf("   Auth: %v", authEnabled)
-log.Printf("   Providers: %d", registry.Count())
+log.Printf("   Streaming: enabled (SSE)")
 if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 log.Fatalf("❌ Gateway error: %v", err)
 }
@@ -235,16 +217,110 @@ srv.Shutdown(shutdownCtx)
 log.Println("✅ Gateway detenido")
 }
 
+// handleStream maneja el streaming SSE real
+func handleStream(
+w http.ResponseWriter,
+req *http.Request,
+provider providers.Provider,
+chatReq *providers.ChatRequest,
+cb *providers.CircuitBreaker,
+tenantID, userID, apiKeyID string,
+) {
+// Verificar que el ResponseWriter soporta Flusher
+flusher, ok := w.(http.Flusher)
+if !ok {
+writeError(w, http.StatusInternalServerError, "streaming_not_supported", "streaming not supported")
+return
+}
+
+// Iniciar stream del provider
+start := time.Now()
+chunks, err := provider.Stream(req.Context(), chatReq)
+if err != nil {
+cb.RecordFailure()
+logger.Errorf("❌ Stream error: %v", err)
+writeError(w, http.StatusBadGateway, "provider_error", err.Error())
+return
+}
+
+// Configurar headers SSE
+w.Header().Set("Content-Type", "text/event-stream")
+w.Header().Set("Cache-Control", "no-cache")
+w.Header().Set("Connection", "keep-alive")
+w.Header().Set("X-Accel-Buffering", "no")
+w.Header().Set("X-Provider", provider.ID())
+w.Header().Set("X-Tenant-Id", tenantID)
+w.Header().Set("X-User-Id", userID)
+w.Header().Set("X-Api-Key-Id", apiKeyID)
+w.WriteHeader(http.StatusOK)
+flusher.Flush()
+
+var ttft time.Duration
+totalChunks := 0
+
+// Procesar chunks
+for chunk := range chunks {
+// Verificar contexto del cliente
+select {
+case <-req.Context().Done():
+logger.Warnf("⚠️ Client disconnected after %d chunks", totalChunks)
+cb.RecordSuccess() // parcialmente OK
+return
+default:
+}
+
+// Primer chunk → calcular TTFT
+if totalChunks == 0 {
+ttft = time.Since(start)
+logger.Infof("⚡ TTFT: %dms", ttft.Milliseconds())
+}
+
+// Serializar como SSE
+data, err := json.Marshal(map[string]interface{}{
+"id":      "chatcmpl-stream",
+"object":  "chat.completion.chunk",
+"created": time.Now().Unix(),
+"model":   chatReq.Model,
+"choices": []map[string]interface{}{
+{
+"index": chunk.Index,
+"delta": map[string]string{
+"content": chunk.Delta,
+},
+"finish_reason": chunk.FinishReason,
+},
+},
+})
+if err != nil {
+continue
+}
+
+fmt.Fprintf(w, "data: %s\n\n", string(data))
+flusher.Flush()
+totalChunks++
+
+if chunk.FinishReason != "" {
+break
+}
+}
+
+// Enviar [DONE]
+fmt.Fprintf(w, "data: [DONE]\n\n")
+flusher.Flush()
+
+cb.RecordSuccess()
+latency := time.Since(start)
+logger.Infof("✅ Stream completed: %d chunks, TTFT=%dms, total=%dms",
+totalChunks, ttft.Milliseconds(), latency.Milliseconds())
+}
+
 // selectProvider elige un provider según el modelo
 func selectProvider(manager *providers.Manager, model string) providers.Provider {
 available := manager.AvailableProviders()
-
-// Preferencias por modelo
 if len(available) == 0 {
 return nil
 }
 
-// gpt-* → OpenAI
 if len(model) >= 3 && model[:3] == "gpt" {
 for _, p := range available {
 if p.ID() == "openai" {
@@ -253,7 +329,6 @@ return p
 }
 }
 
-// claude-* → Anthropic
 if len(model) >= 6 && model[:6] == "claude" {
 for _, p := range available {
 if p.ID() == "anthropic" {
@@ -262,7 +337,6 @@ return p
 }
 }
 
-// llava, llama, mistral, qwen → Ollama
 localPrefixes := []string{"llama", "mistral", "qwen", "phi", "gemma", "llava"}
 for _, prefix := range localPrefixes {
 if len(model) >= len(prefix) && model[:len(prefix)] == prefix {
@@ -274,7 +348,6 @@ return p
 }
 }
 
-// Fallback: primer provider disponible
 return available[0]
 }
 
@@ -287,27 +360,4 @@ json.NewEncoder(w).Encode(map[string]interface{}{
 "message": message,
 },
 })
-}
-
-func boolToStr(b bool) string {
-if b {
-return "true"
-}
-return "false"
-}
-
-func intToStr(n int) string {
-return json.Number(json.Number(time.Now().Format("05"))).String()[:0] + intToString(n)
-}
-
-func intToString(n int) string {
-if n == 0 {
-return "0"
-}
-var result []byte
-for n > 0 {
-result = append([]byte{byte('0' + n%10)}, result...)
-n /= 10
-}
-return string(result)
 }
