@@ -97,9 +97,8 @@ alert.TenantID, alert.Threshold, alert.Spent, alert.Limit)
 })
 log.Printf("💰 Accounting service iniciado")
 
-// Tracing V3.8
 traceStore := observabilityv3.NewStore(10000)
-log.Printf("🔍 Trace Store iniciado: %d capacity", 10000)
+log.Printf("🔍 Trace Store iniciado: 10000 capacity")
 
 identitySvc := identity.NewService(pgClient)
 authEnabled := os.Getenv("SENTINELFLOW_ENV") == "production"
@@ -112,6 +111,29 @@ accountingMw := middleware.NewAccountingMiddleware(accountingSvc, true)
 normalizerSvc := normalizer.New()
 
 r := mux.NewRouter()
+
+// === V3.9 Health endpoints ===
+r.HandleFunc("/livez", func(w http.ResponseWriter, req *http.Request) {
+w.Header().Set("Content-Type", "application/json")
+w.WriteHeader(http.StatusOK)
+w.Write([]byte(`{"status":"alive"}`))
+}).Methods("GET")
+
+r.HandleFunc("/readyz", func(w http.ResponseWriter, req *http.Request) {
+ctx, cancel := context.WithTimeout(req.Context(), 2*time.Second)
+defer cancel()
+
+if err := pgClient.HealthCheck(ctx); err != nil {
+w.Header().Set("Content-Type", "application/json")
+w.WriteHeader(http.StatusServiceUnavailable)
+w.Write([]byte(`{"status":"not_ready","reason":"database_unavailable"}`))
+return
+}
+
+w.Header().Set("Content-Type", "application/json")
+w.WriteHeader(http.StatusOK)
+w.Write([]byte(`{"status":"ready"}`))
+}).Methods("GET")
 
 r.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
 w.Header().Set("Content-Type", "application/json")
@@ -152,7 +174,6 @@ json.NewEncoder(w).Encode(map[string]interface{}{
 })
 }).Methods("GET")
 
-// V3.8 Tracing endpoints
 r.HandleFunc("/v1/traces", func(w http.ResponseWriter, req *http.Request) {
 tenantID := req.URL.Query().Get("tenant")
 limit := 50
@@ -321,6 +342,7 @@ signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
 go func() {
 log.Printf("✅ Gateway en http://localhost:8080")
+log.Printf("   Health:  /livez /readyz /health")
 log.Printf("   Tracing: enabled")
 if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 log.Fatalf("❌ Gateway error: %v", err)
@@ -328,13 +350,21 @@ log.Fatalf("❌ Gateway error: %v", err)
 }()
 
 <-stop
-log.Println("🔄 Apagando...")
+log.Println("🔄 Apagando (graceful shutdown V3.9)...")
 
-shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+// V3.9: Drenar tráfico antes del shutdown
+log.Println("⏸️  Drenando tráfico (3s para LB)...")
+time.Sleep(3 * time.Second)
+
+shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 defer shutdownCancel()
 
-srv.Shutdown(shutdownCtx)
-log.Println("✅ Gateway detenido")
+log.Println("🛑 Esperando requests en vuelo (max 30s)...")
+if err := srv.Shutdown(shutdownCtx); err != nil {
+log.Printf("⚠️ Error en shutdown: %v", err)
+}
+
+log.Println("✅ Gateway detenido correctamente")
 }
 
 func handleStream(
@@ -363,6 +393,9 @@ w.Header().Set("Content-Type", "text/event-stream")
 w.Header().Set("Cache-Control", "no-cache")
 w.Header().Set("Connection", "keep-alive")
 w.Header().Set("X-Provider", provider.ID())
+w.Header().Set("X-Tenant-Id", tenantID)
+w.Header().Set("X-User-Id", userID)
+w.Header().Set("X-Api-Key-Id", apiKeyID)
 w.WriteHeader(http.StatusOK)
 flusher.Flush()
 
