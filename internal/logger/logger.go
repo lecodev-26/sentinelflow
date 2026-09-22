@@ -1,99 +1,99 @@
 package logger
 
 import (
-"os"
+	"os"
 
-"github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
 
 var log *logrus.Logger
 
 func Init(cfg *struct {
-Level  string
-Format string
-Output string
+	Level  string
+	Format string
+	Output string
 }) {
-log = logrus.New()
+	log = logrus.New()
 
-level, err := logrus.ParseLevel(cfg.Level)
-if err != nil {
-level = logrus.InfoLevel
-}
-log.SetLevel(level)
+	level, err := logrus.ParseLevel(cfg.Level)
+	if err != nil {
+		level = logrus.InfoLevel
+	}
+	log.SetLevel(level)
 
-if cfg.Format == "json" {
-log.SetFormatter(&logrus.JSONFormatter{})
-} else {
-log.SetFormatter(&logrus.TextFormatter{
-FullTimestamp: true,
-})
-}
+	if cfg.Format == "json" {
+		log.SetFormatter(&logrus.JSONFormatter{})
+	} else {
+		log.SetFormatter(&logrus.TextFormatter{
+			FullTimestamp: true,
+		})
+	}
 
-if cfg.Output == "file" {
-file, err := os.OpenFile("logs/sentinelflow.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-if err == nil {
-log.SetOutput(file)
-} else {
-log.SetOutput(os.Stdout)
-}
-} else {
-log.SetOutput(os.Stdout)
-}
+	if cfg.Output == "file" {
+		file, err := os.OpenFile("logs/sentinelflow.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		if err == nil {
+			log.SetOutput(file)
+		} else {
+			log.SetOutput(os.Stdout)
+		}
+	} else {
+		log.SetOutput(os.Stdout)
+	}
 }
 
 func Get() *logrus.Logger {
-if log == nil {
-log = logrus.New()
-log.SetFormatter(&logrus.TextFormatter{
-FullTimestamp: true,
-})
-log.SetLevel(logrus.InfoLevel)
-}
-return log
+	if log == nil {
+		log = logrus.New()
+		log.SetFormatter(&logrus.TextFormatter{
+			FullTimestamp: true,
+		})
+		log.SetLevel(logrus.InfoLevel)
+	}
+	return log
 }
 
 // WithFields devuelve una entrada con campos estructurados
 func WithFields(fields map[string]interface{}) *logrus.Entry {
-return Get().WithFields(logrus.Fields(fields))
+	return Get().WithFields(logrus.Fields(fields))
 }
 
 // Funciones helper
 func Debug(args ...interface{}) {
-Get().Debug(args...)
+	Get().Debug(args...)
 }
 
 func Info(args ...interface{}) {
-Get().Info(args...)
+	Get().Info(args...)
 }
 
 func Warn(args ...interface{}) {
-Get().Warn(args...)
+	Get().Warn(args...)
 }
 
 func Error(args ...interface{}) {
-Get().Error(args...)
+	Get().Error(args...)
 }
 
 func Fatal(args ...interface{}) {
-Get().Fatal(args...)
+	Get().Fatal(args...)
 }
 
 func Debugf(format string, args ...interface{}) {
-Get().Debugf(format, args...)
+	Get().Debugf(format, args...)
 }
 
 func Infof(format string, args ...interface{}) {
-Get().Infof(format, args...)
+	Get().Infof(format, args...)
 }
 
 func Warnf(format string, args ...interface{}) {
-Get().Warnf(format, args...)
+	Get().Warnf(format, args...)
 }
 
 func Errorf(format string, args ...interface{}) {
-Get().Errorf(format, args...)
+	Get().Errorf(format, args...)
 }
 
 func Fatalf(format string, args ...interface{}) {
-Get().Fatalf(format, args...)
+	Get().Fatalf(format, args...)
 }
