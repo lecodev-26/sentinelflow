@@ -17,6 +17,7 @@ import (
 "github.com/lecodev-26/sentinelflow/internal/gateway/v3/normalizer"
 "github.com/lecodev-26/sentinelflow/internal/identity"
 "github.com/lecodev-26/sentinelflow/internal/logger"
+policyv3 "github.com/lecodev-26/sentinelflow/internal/policy/v3"
 providers "github.com/lecodev-26/sentinelflow/internal/providers/v3"
 "github.com/lecodev-26/sentinelflow/internal/providers/v3/adapters"
 routing "github.com/lecodev-26/sentinelflow/internal/routing/v3"
@@ -74,24 +75,24 @@ defer manager.Stop()
 modelRegistry := routing.NewModelRegistry()
 routingEngine := routing.NewEngine(modelRegistry, manager, routing.DefaultWeights())
 
-// Ejemplo de experimento (10% canary)
-routingEngine.Experiments().Add("gpt-4", &routing.Experiment{
-ID:      "exp-canary-1",
-Name:    "Canary Anthropic",
-Enabled: false, // desactivado por defecto
-Traffic: map[string]float64{
-"openai":    0.9,
-"anthropic": 0.1,
-},
-})
-
 log.Printf("📊 Providers: %d, Models: %d", registry.Count(), len(modelRegistry.List()))
+
+// Policy Engine V3.5
+policyEvaluator := policyv3.NewEvaluator()
+defaultPolicy := policyv3.NewDefaultPolicy("default")
+compiled, err := policyv3.NewCompiler().Compile(defaultPolicy)
+if err != nil {
+log.Fatalf("❌ Error compilando policy: %v", err)
+}
+policyEvaluator.Register(compiled)
+log.Printf("📋 Policy Engine: %d políticas", len(policyEvaluator.List()))
 
 identitySvc := identity.NewService(pgClient)
 authEnabled := os.Getenv("SENTINELFLOW_ENV") == "production"
 
 authMw := middleware.NewAuth(identitySvc, authEnabled)
 idempotencyMw := middleware.NewIdempotency(24 * time.Hour)
+policyMw := middleware.NewPolicyMiddleware(policyEvaluator, true)
 normalizerSvc := normalizer.New()
 
 r := mux.NewRouter()
@@ -156,7 +157,7 @@ apiKeyID := middleware.GetAPIKeyID(req.Context())
 logger.Infof("📨 Request: tenant=%s user=%s format=%s model=%s stream=%v",
 tenantID, userID, format, normReq.Model, normReq.Stream)
 
-// Construir routing request
+// Routing request
 routeReq := &routing.Request{
 RequestID: req.Header.Get("Idempotency-Key"),
 Model:     normReq.Model,
@@ -168,18 +169,24 @@ if normReq.Stream {
 routeReq.RequiredCapabilities = []string{"stream"}
 }
 
-// Decidir
+// Aplicar routing policy si existe
+if policyResult, ok := middleware.GetPolicyResult(req.Context()); ok && policyResult.Routing != nil {
+routeReq.RequiredCapabilities = append(routeReq.RequiredCapabilities, policyResult.Routing.RequiredCapabilities...)
+routeReq.PreferredProvider = policyResult.Routing.PreferredProvider
+routeReq.ExcludedProviders = policyResult.Routing.BlockedProviders
+routeReq.MaxCost = policyResult.Routing.MaxCostPer1M
+}
+
 decision, err := routingEngine.Route(routeReq)
 if err != nil {
 writeError(w, http.StatusServiceUnavailable, "no_provider", err.Error())
 return
 }
 
-logger.Infof("🎯 Routing: %s → %s (score=%.3f, reason=%s, filtered=%d, exp=%s)",
+logger.Infof("🎯 Routing: %s → %s (score=%.3f, reason=%s, filtered=%d)",
 normReq.Model, decision.Selected.ProviderID, decision.Score.Total,
-decision.Reason, decision.Filtered, decision.Experiment)
+decision.Reason, decision.Filtered)
 
-// Obtener provider
 provider, ok := registry.Get(decision.Selected.ProviderID)
 if !ok {
 writeError(w, http.StatusServiceUnavailable, "provider_not_found", "provider not found")
@@ -235,7 +242,11 @@ json.NewEncoder(w).Encode(resp)
 })
 
 r.Handle("/v1/chat/completions",
-authMw.Handler(idempotencyMw.Handler(chatHandler)),
+authMw.Handler(
+idempotencyMw.Handler(
+policyMw.Handler(chatHandler),
+),
+),
 ).Methods("POST")
 
 srv := &http.Server{
@@ -252,7 +263,9 @@ signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 go func() {
 log.Printf("✅ Gateway en http://localhost:8080")
 log.Printf("   Auth: %v", authEnabled)
-log.Printf("   Routing: intelligent (weights=latency 0.35, cost 0.25, health 0.25, quality 0.15)")
+log.Printf("   Routing: intelligent")
+log.Printf("   Policy: enabled")
+log.Printf("   Security: PII + Secrets + Prompt + SSRF")
 if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 log.Fatalf("❌ Gateway error: %v", err)
 }
@@ -327,8 +340,8 @@ data, err := json.Marshal(map[string]interface{}{
 "model":   chatReq.Model,
 "choices": []map[string]interface{}{
 {
-"index": chunk.Index,
-"delta": map[string]string{"content": chunk.Delta},
+"index":         chunk.Index,
+"delta":         map[string]string{"content": chunk.Delta},
 "finish_reason": chunk.FinishReason,
 },
 },
