@@ -19,6 +19,7 @@ import (
 "github.com/lecodev-26/sentinelflow/internal/logger"
 providers "github.com/lecodev-26/sentinelflow/internal/providers/v3"
 "github.com/lecodev-26/sentinelflow/internal/providers/v3/adapters"
+routing "github.com/lecodev-26/sentinelflow/internal/routing/v3"
 "github.com/lecodev-26/sentinelflow/internal/storage/postgres"
 "github.com/lecodev-26/sentinelflow/internal/version"
 )
@@ -36,7 +37,6 @@ Format: "json",
 Output: "stdout",
 })
 
-// PostgreSQL
 dbURL := os.Getenv("SENTINELFLOW_DATABASE_URL")
 if dbURL == "" {
 log.Fatalf("❌ SENTINELFLOW_DATABASE_URL is required")
@@ -50,26 +50,19 @@ if err != nil {
 log.Fatalf("❌ Error conectando a PostgreSQL: %v", err)
 }
 defer pgClient.Close()
-
 log.Printf("✅ PostgreSQL conectado")
 
-// Provider Registry V3
+// Provider Registry
 registry := providers.NewRegistry()
 
 if apiKey := os.Getenv("OPENAI_API_KEY"); apiKey != "" {
 _ = registry.Register(adapters.NewOpenAIAdapter(apiKey, ""))
 log.Printf("✅ Provider registrado: openai")
-} else {
-log.Printf("⚠️ OPENAI_API_KEY no configurada")
 }
-
 if apiKey := os.Getenv("ANTHROPIC_API_KEY"); apiKey != "" {
 _ = registry.Register(adapters.NewAnthropicAdapter(apiKey, ""))
 log.Printf("✅ Provider registrado: anthropic")
-} else {
-log.Printf("⚠️ ANTHROPIC_API_KEY no configurada")
 }
-
 _ = registry.Register(adapters.NewOllamaAdapter(""))
 log.Printf("✅ Provider registrado: ollama")
 
@@ -77,7 +70,22 @@ manager := providers.NewManager(registry)
 manager.Start(context.Background())
 defer manager.Stop()
 
-log.Printf("📊 Providers registrados: %d", registry.Count())
+// Model Registry + Routing Engine
+modelRegistry := routing.NewModelRegistry()
+routingEngine := routing.NewEngine(modelRegistry, manager, routing.DefaultWeights())
+
+// Ejemplo de experimento (10% canary)
+routingEngine.Experiments().Add("gpt-4", &routing.Experiment{
+ID:      "exp-canary-1",
+Name:    "Canary Anthropic",
+Enabled: false, // desactivado por defecto
+Traffic: map[string]float64{
+"openai":    0.9,
+"anthropic": 0.1,
+},
+})
+
+log.Printf("📊 Providers: %d, Models: %d", registry.Count(), len(modelRegistry.List()))
 
 identitySvc := identity.NewService(pgClient)
 authEnabled := os.Getenv("SENTINELFLOW_ENV") == "production"
@@ -88,21 +96,18 @@ normalizerSvc := normalizer.New()
 
 r := mux.NewRouter()
 
-// Health
 r.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
 w.Header().Set("Content-Type", "application/json")
-w.Write([]byte(fmt.Sprintf(`{"status":"ok","service":"sentinelflow-gateway","version":"%s","auth_enabled":%v,"providers":%d}`,
-version.String(), authEnabled, registry.Count())))
+w.Write([]byte(fmt.Sprintf(`{"status":"ok","service":"sentinelflow-gateway","version":"%s","auth_enabled":%v,"providers":%d,"models":%d}`,
+version.String(), authEnabled, registry.Count(), len(modelRegistry.List()))))
 }).Methods("GET")
 
-// Version
 r.HandleFunc("/version", func(w http.ResponseWriter, req *http.Request) {
 w.Header().Set("Content-Type", "application/json")
 info := version.Get()
 w.Write([]byte(`{"version":"` + info.Version + `","commit":"` + info.Commit + `"}`))
 }).Methods("GET")
 
-// Providers status
 r.HandleFunc("/v1/providers", func(w http.ResponseWriter, req *http.Request) {
 w.Header().Set("Content-Type", "application/json")
 json.NewEncoder(w).Encode(map[string]interface{}{
@@ -110,7 +115,26 @@ json.NewEncoder(w).Encode(map[string]interface{}{
 })
 }).Methods("GET")
 
-// Chat handler (con soporte streaming)
+r.HandleFunc("/v1/models", func(w http.ResponseWriter, req *http.Request) {
+w.Header().Set("Content-Type", "application/json")
+models := modelRegistry.List()
+data := make([]map[string]interface{}, 0, len(models))
+for _, m := range models {
+data = append(data, map[string]interface{}{
+"id":       m.ID,
+"object":   "model",
+"provider": m.Provider,
+"owned_by": m.Provider,
+"context":  m.ContextSize,
+"pricing":  map[string]float64{"input": m.InputPer1M, "output": m.OutputPer1M},
+})
+}
+json.NewEncoder(w).Encode(map[string]interface{}{
+"object": "list",
+"data":   data,
+})
+}).Methods("GET")
+
 chatHandler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 body, err := io.ReadAll(req.Body)
 if err != nil {
@@ -132,6 +156,36 @@ apiKeyID := middleware.GetAPIKeyID(req.Context())
 logger.Infof("📨 Request: tenant=%s user=%s format=%s model=%s stream=%v",
 tenantID, userID, format, normReq.Model, normReq.Stream)
 
+// Construir routing request
+routeReq := &routing.Request{
+RequestID: req.Header.Get("Idempotency-Key"),
+Model:     normReq.Model,
+}
+if routeReq.RequestID == "" {
+routeReq.RequestID = fmt.Sprintf("%d", time.Now().UnixNano())
+}
+if normReq.Stream {
+routeReq.RequiredCapabilities = []string{"stream"}
+}
+
+// Decidir
+decision, err := routingEngine.Route(routeReq)
+if err != nil {
+writeError(w, http.StatusServiceUnavailable, "no_provider", err.Error())
+return
+}
+
+logger.Infof("🎯 Routing: %s → %s (score=%.3f, reason=%s, filtered=%d, exp=%s)",
+normReq.Model, decision.Selected.ProviderID, decision.Score.Total,
+decision.Reason, decision.Filtered, decision.Experiment)
+
+// Obtener provider
+provider, ok := registry.Get(decision.Selected.ProviderID)
+if !ok {
+writeError(w, http.StatusServiceUnavailable, "provider_not_found", "provider not found")
+return
+}
+
 chatReq := &providers.ChatRequest{
 Model:       normReq.Model,
 Temperature: normReq.Temperature,
@@ -145,25 +199,17 @@ Content: m.Content,
 })
 }
 
-provider := selectProvider(manager, normReq.Model)
-if provider == nil {
-writeError(w, http.StatusServiceUnavailable, "no_provider", "no provider available")
-return
-}
-
 cb := manager.GetBreaker(provider.ID())
 if !cb.Allow() {
 writeError(w, http.StatusServiceUnavailable, "circuit_open", "circuit breaker open")
 return
 }
 
-// === STREAMING ===
 if normReq.Stream {
-handleStream(w, req, provider, chatReq, cb, tenantID, userID, apiKeyID)
+handleStream(w, req, provider, chatReq, cb, tenantID, userID, apiKeyID, decision)
 return
 }
 
-// === NON-STREAMING ===
 resp, err := provider.Chat(req.Context(), chatReq)
 if err != nil {
 cb.RecordFailure()
@@ -176,9 +222,14 @@ cb.RecordSuccess()
 
 w.Header().Set("Content-Type", "application/json")
 w.Header().Set("X-Provider", provider.ID())
+w.Header().Set("X-Routing-Score", fmt.Sprintf("%.3f", decision.Score.Total))
+w.Header().Set("X-Routing-Reason", decision.Reason)
 w.Header().Set("X-Tenant-Id", tenantID)
 w.Header().Set("X-User-Id", userID)
 w.Header().Set("X-Api-Key-Id", apiKeyID)
+if decision.Experiment != "" {
+w.Header().Set("X-Experiment", decision.Experiment)
+}
 w.WriteHeader(http.StatusOK)
 json.NewEncoder(w).Encode(resp)
 })
@@ -191,7 +242,7 @@ srv := &http.Server{
 Addr:         ":8080",
 Handler:      r,
 ReadTimeout:  30 * time.Second,
-WriteTimeout: 0, // 0 para streaming
+WriteTimeout: 0,
 IdleTimeout:  60 * time.Second,
 }
 
@@ -201,7 +252,7 @@ signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 go func() {
 log.Printf("✅ Gateway en http://localhost:8080")
 log.Printf("   Auth: %v", authEnabled)
-log.Printf("   Streaming: enabled (SSE)")
+log.Printf("   Routing: intelligent (weights=latency 0.35, cost 0.25, health 0.25, quality 0.15)")
 if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 log.Fatalf("❌ Gateway error: %v", err)
 }
@@ -217,7 +268,6 @@ srv.Shutdown(shutdownCtx)
 log.Println("✅ Gateway detenido")
 }
 
-// handleStream maneja el streaming SSE real
 func handleStream(
 w http.ResponseWriter,
 req *http.Request,
@@ -225,30 +275,29 @@ provider providers.Provider,
 chatReq *providers.ChatRequest,
 cb *providers.CircuitBreaker,
 tenantID, userID, apiKeyID string,
+decision *routing.Decision,
 ) {
-// Verificar que el ResponseWriter soporta Flusher
 flusher, ok := w.(http.Flusher)
 if !ok {
 writeError(w, http.StatusInternalServerError, "streaming_not_supported", "streaming not supported")
 return
 }
 
-// Iniciar stream del provider
 start := time.Now()
 chunks, err := provider.Stream(req.Context(), chatReq)
 if err != nil {
 cb.RecordFailure()
-logger.Errorf("❌ Stream error: %v", err)
 writeError(w, http.StatusBadGateway, "provider_error", err.Error())
 return
 }
 
-// Configurar headers SSE
 w.Header().Set("Content-Type", "text/event-stream")
 w.Header().Set("Cache-Control", "no-cache")
 w.Header().Set("Connection", "keep-alive")
 w.Header().Set("X-Accel-Buffering", "no")
 w.Header().Set("X-Provider", provider.ID())
+w.Header().Set("X-Routing-Score", fmt.Sprintf("%.3f", decision.Score.Total))
+w.Header().Set("X-Routing-Reason", decision.Reason)
 w.Header().Set("X-Tenant-Id", tenantID)
 w.Header().Set("X-User-Id", userID)
 w.Header().Set("X-Api-Key-Id", apiKeyID)
@@ -258,24 +307,19 @@ flusher.Flush()
 var ttft time.Duration
 totalChunks := 0
 
-// Procesar chunks
 for chunk := range chunks {
-// Verificar contexto del cliente
 select {
 case <-req.Context().Done():
-logger.Warnf("⚠️ Client disconnected after %d chunks", totalChunks)
-cb.RecordSuccess() // parcialmente OK
+cb.RecordSuccess()
 return
 default:
 }
 
-// Primer chunk → calcular TTFT
 if totalChunks == 0 {
 ttft = time.Since(start)
 logger.Infof("⚡ TTFT: %dms", ttft.Milliseconds())
 }
 
-// Serializar como SSE
 data, err := json.Marshal(map[string]interface{}{
 "id":      "chatcmpl-stream",
 "object":  "chat.completion.chunk",
@@ -284,9 +328,7 @@ data, err := json.Marshal(map[string]interface{}{
 "choices": []map[string]interface{}{
 {
 "index": chunk.Index,
-"delta": map[string]string{
-"content": chunk.Delta,
-},
+"delta": map[string]string{"content": chunk.Delta},
 "finish_reason": chunk.FinishReason,
 },
 },
@@ -304,51 +346,12 @@ break
 }
 }
 
-// Enviar [DONE]
 fmt.Fprintf(w, "data: [DONE]\n\n")
 flusher.Flush()
 
 cb.RecordSuccess()
-latency := time.Since(start)
 logger.Infof("✅ Stream completed: %d chunks, TTFT=%dms, total=%dms",
-totalChunks, ttft.Milliseconds(), latency.Milliseconds())
-}
-
-// selectProvider elige un provider según el modelo
-func selectProvider(manager *providers.Manager, model string) providers.Provider {
-available := manager.AvailableProviders()
-if len(available) == 0 {
-return nil
-}
-
-if len(model) >= 3 && model[:3] == "gpt" {
-for _, p := range available {
-if p.ID() == "openai" {
-return p
-}
-}
-}
-
-if len(model) >= 6 && model[:6] == "claude" {
-for _, p := range available {
-if p.ID() == "anthropic" {
-return p
-}
-}
-}
-
-localPrefixes := []string{"llama", "mistral", "qwen", "phi", "gemma", "llava"}
-for _, prefix := range localPrefixes {
-if len(model) >= len(prefix) && model[:len(prefix)] == prefix {
-for _, p := range available {
-if p.ID() == "ollama" {
-return p
-}
-}
-}
-}
-
-return available[0]
+totalChunks, ttft.Milliseconds(), time.Since(start).Milliseconds())
 }
 
 func writeError(w http.ResponseWriter, status int, errType, message string) {
