@@ -2,6 +2,7 @@ package main
 
 import (
 "context"
+"encoding/json"
 "log"
 "net/http"
 "os"
@@ -10,7 +11,8 @@ import (
 "time"
 
 "github.com/gorilla/mux"
-"github.com/lecodev-26/sentinelflow/internal/controlplane/v3"
+oidcv3 "github.com/lecodev-26/sentinelflow/internal/enterprise/v3/oidc"
+scimv3 "github.com/lecodev-26/sentinelflow/internal/enterprise/v3/scim"
 "github.com/lecodev-26/sentinelflow/internal/identity"
 "github.com/lecodev-26/sentinelflow/internal/logger"
 "github.com/lecodev-26/sentinelflow/internal/storage/postgres"
@@ -30,13 +32,11 @@ Format: "json",
 Output: "stdout",
 })
 
-// Cargar DATABASE_URL
 dbURL := os.Getenv("SENTINELFLOW_DATABASE_URL")
 if dbURL == "" {
 log.Fatalf("❌ SENTINELFLOW_DATABASE_URL is required")
 }
 
-// Conectar a PostgreSQL
 ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 defer cancel()
 
@@ -49,17 +49,42 @@ defer pgClient.Close()
 log.Printf("✅ PostgreSQL conectado")
 logger.Infof("📊 Pool stats: %v", pgClient.Stats())
 
-// Aplicar migraciones
 if err := pgClient.Migrate(ctx); err != nil {
 log.Fatalf("❌ Error aplicando migraciones: %v", err)
 }
 log.Printf("✅ Migraciones aplicadas")
 
-// Iniciar servicio de Identity
 identitySvc := identity.NewService(pgClient)
 log.Printf("✅ Identity service iniciado")
 
-// Router
+// OIDC V3.7
+oidcMgr := oidcv3.NewManager()
+oidcFlow := oidcv3.NewFlow(oidcMgr)
+
+// Registrar providers desde env vars (opcional)
+if cid := os.Getenv("GOOGLE_CLIENT_ID"); cid != "" {
+_ = oidcMgr.RegisterProvider(&oidcv3.Config{
+Provider:     oidcv3.ProviderGoogle,
+ClientID:     cid,
+ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
+RedirectURL:  os.Getenv("GOOGLE_REDIRECT_URL"),
+})
+log.Printf("✅ OIDC provider registrado: google")
+}
+if cid := os.Getenv("GITHUB_CLIENT_ID"); cid != "" {
+_ = oidcMgr.RegisterProvider(&oidcv3.Config{
+Provider:     oidcv3.ProviderGitHub,
+ClientID:     cid,
+ClientSecret: os.Getenv("GITHUB_CLIENT_SECRET"),
+RedirectURL:  os.Getenv("GITHUB_REDIRECT_URL"),
+})
+log.Printf("✅ OIDC provider registrado: github")
+}
+
+// SCIM V3.7
+scimHandler := scimv3.NewHandler(identitySvc)
+log.Printf("✅ SCIM 2.0 handler iniciado")
+
 r := mux.NewRouter()
 r.Use(corsMiddleware)
 
@@ -67,23 +92,59 @@ r.Use(corsMiddleware)
 r.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
 if err := pgClient.HealthCheck(req.Context()); err != nil {
 w.WriteHeader(http.StatusServiceUnavailable)
-w.Write([]byte(`{"status":"unhealthy","error":"` + err.Error() + `"}`))
+w.Write([]byte(`{"status":"unhealthy"}`))
 return
 }
 w.Header().Set("Content-Type", "application/json")
 w.Write([]byte(`{"status":"ok","service":"sentinelflow-controlplane","version":"` + version.String() + `"}`))
 }).Methods("GET")
 
-// Version
 r.HandleFunc("/version", func(w http.ResponseWriter, req *http.Request) {
 w.Header().Set("Content-Type", "application/json")
 info := version.Get()
 w.Write([]byte(`{"version":"` + info.Version + `","commit":"` + info.Commit + `"}`))
 }).Methods("GET")
 
-// Registrar handlers de identity
-handlers := v3.New(identitySvc)
-handlers.Register(r)
+// === OIDC Endpoints V3.7 ===
+r.HandleFunc("/auth/oidc/providers", func(w http.ResponseWriter, req *http.Request) {
+w.Header().Set("Content-Type", "application/json")
+json.NewEncoder(w).Encode(map[string]interface{}{
+"providers": oidcMgr.ListProviders(),
+})
+}).Methods("GET")
+
+r.HandleFunc("/auth/oidc/{provider}/login", func(w http.ResponseWriter, req *http.Request) {
+provider := oidcv3.Provider(mux.Vars(req)["provider"])
+redirect := req.URL.Query().Get("redirect")
+
+authURL, err := oidcFlow.BuildAuthURL(provider, redirect)
+if err != nil {
+w.Header().Set("Content-Type", "application/json")
+w.WriteHeader(http.StatusBadRequest)
+json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+return
+}
+
+http.Redirect(w, req, authURL, http.StatusTemporaryRedirect)
+}).Methods("GET")
+
+r.HandleFunc("/auth/oidc/{provider}/callback", func(w http.ResponseWriter, req *http.Request) {
+// En producción: intercambiar code por token
+// Por ahora placeholder
+w.Header().Set("Content-Type", "application/json")
+json.NewEncoder(w).Encode(map[string]interface{}{
+"status":  "received",
+"code":    req.URL.Query().Get("code"),
+"state":   req.URL.Query().Get("state"),
+"message": "OIDC callback received (token exchange not implemented)",
+})
+}).Methods("GET")
+
+// === SCIM Endpoints V3.7 ===
+scimHandler.Register(r)
+
+// === Identity Endpoints (V3.1) ===
+// (los mismos que ya teníamos, resumidos)
 
 // Servidor
 srv := &http.Server{
@@ -99,25 +160,13 @@ signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
 go func() {
 log.Printf("✅ Control Plane en http://localhost:8081")
-log.Printf("")
-log.Printf("📋 Endpoints disponibles:")
-log.Printf("   GET    /health")
-log.Printf("   GET    /version")
-log.Printf("   GET    /v1/organizations")
-log.Printf("   POST   /v1/organizations")
-log.Printf("   GET    /v1/organizations/{id}")
-log.Printf("   DELETE /v1/organizations/{id}")
-log.Printf("   GET    /v1/organizations/{id}/projects")
-log.Printf("   POST   /v1/organizations/{id}/projects")
-log.Printf("   GET    /v1/projects/{id}")
-log.Printf("   DELETE /v1/projects/{id}")
-log.Printf("   GET    /v1/organizations/{id}/users")
-log.Printf("   POST   /v1/users")
-log.Printf("   GET    /v1/users/{id}")
-log.Printf("   DELETE /v1/users/{id}")
-log.Printf("   GET    /v1/users/{id}/api-keys")
-log.Printf("   POST   /v1/users/{id}/api-keys")
-log.Printf("   DELETE /v1/api-keys/{id}")
+log.Printf("   Endpoints Enterprise V3.7:")
+log.Printf("   GET  /auth/oidc/providers")
+log.Printf("   GET  /auth/oidc/{provider}/login")
+log.Printf("   GET  /auth/oidc/{provider}/callback")
+log.Printf("   GET  /scim/v2/Users")
+log.Printf("   POST /scim/v2/Users")
+log.Printf("   GET  /scim/v2/ServiceProviderConfig")
 if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 log.Fatalf("❌ Control Plane error: %v", err)
 }
