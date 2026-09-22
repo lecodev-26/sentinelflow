@@ -168,16 +168,47 @@ defer rc.mu.Unlock()
 rc.Latency = time.Since(rc.StartTime)
 }
 
-// Snapshot devuelve una copia inmutable del contexto
-func (rc *RequestContext) Snapshot() RequestContext {
+// Snapshot devuelve una copia inmutable del contexto (sin copiar el mutex)
+func (rc *RequestContext) Snapshot() *RequestContext {
 rc.mu.RLock()
 defer rc.mu.RUnlock()
-snapshot := *rc
-snapshot.mu = sync.RWMutex{}
+
+snapshot := &RequestContext{
+RequestID:     rc.RequestID,
+TraceID:       rc.TraceID,
+TenantID:      rc.TenantID,
+ProjectID:     rc.ProjectID,
+UserID:        rc.UserID,
+APIKeyID:      rc.APIKeyID,
+Role:          rc.Role,
+Method:        rc.Method,
+Path:          rc.Path,
+Model:         rc.Model,
+Stream:        rc.Stream,
+IP:            rc.IP,
+UserAgent:     rc.UserAgent,
+StartTime:     rc.StartTime,
+Provider:      rc.Provider,
+StatusCode:    rc.StatusCode,
+Latency:       rc.Latency,
+TTFT:          rc.TTFT,
+InputTokens:   rc.InputTokens,
+OutputTokens:  rc.OutputTokens,
+TotalTokens:   rc.TotalTokens,
+CachedTokens:  rc.CachedTokens,
+EstimatedCost: rc.EstimatedCost,
+ActualCost:    rc.ActualCost,
+CacheHit:      rc.CacheHit,
+CacheLayer:    rc.CacheLayer,
+Error:         rc.Error,
+ctx:           rc.ctx,
+}
+
 snapshot.Metadata = make(map[string]interface{})
 for k, v := range rc.Metadata {
 snapshot.Metadata[k] = v
 }
+
 return snapshot
 }
 

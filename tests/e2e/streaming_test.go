@@ -31,34 +31,28 @@ return
 }
 defer resp.Body.Close()
 
-// Verificar que es SSE
 contentType := resp.Header.Get("Content-Type")
 if !strings.Contains(contentType, "text/event-stream") {
 t.Errorf("Expected text/event-stream, got %s", contentType)
 }
 
-// Leer eventos
 scanner := bufio.NewScanner(resp.Body)
 var chunks int
 timeout := time.After(10 * time.Second)
 
-for {
+for scanner.Scan() {
 select {
 case <-timeout:
 t.Fatal("Timeout waiting for events")
 default:
-if !scanner.Scan() {
-return
-}
 line := scanner.Text()
 if strings.HasPrefix(line, "data:") {
 chunks++
 }
 if chunks > 0 {
-break
-}
-}
-}
-
 t.Logf("Received %d chunks", chunks)
+return
+}
+}
+}
 }
