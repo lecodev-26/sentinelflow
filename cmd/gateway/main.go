@@ -18,6 +18,7 @@ accountingv3 "github.com/lecodev-26/sentinelflow/internal/accounting/v3"
 "github.com/lecodev-26/sentinelflow/internal/gateway/v3/normalizer"
 "github.com/lecodev-26/sentinelflow/internal/identity"
 "github.com/lecodev-26/sentinelflow/internal/logger"
+observabilityv3 "github.com/lecodev-26/sentinelflow/internal/observability/v3"
 policyv3 "github.com/lecodev-26/sentinelflow/internal/policy/v3"
 providers "github.com/lecodev-26/sentinelflow/internal/providers/v3"
 "github.com/lecodev-26/sentinelflow/internal/providers/v3/adapters"
@@ -54,14 +55,10 @@ log.Fatalf("❌ Error conectando a PostgreSQL: %v", err)
 defer pgClient.Close()
 log.Printf("✅ PostgreSQL conectado")
 
-// Migraciones (aplica las nuevas tablas FinOps)
 if err := pgClient.Migrate(ctx); err != nil {
 log.Printf("⚠️ Error aplicando migraciones: %v", err)
-} else {
-log.Printf("✅ Migraciones aplicadas")
 }
 
-// Provider Registry
 registry := providers.NewRegistry()
 
 if apiKey := os.Getenv("OPENAI_API_KEY"); apiKey != "" {
@@ -79,13 +76,11 @@ manager := providers.NewManager(registry)
 manager.Start(context.Background())
 defer manager.Stop()
 
-// Model Registry + Routing Engine
 modelRegistry := routing.NewModelRegistry()
 routingEngine := routing.NewEngine(modelRegistry, manager, routing.DefaultWeights())
 
 log.Printf("📊 Providers: %d, Models: %d", registry.Count(), len(modelRegistry.List()))
 
-// Policy Engine
 policyEvaluator := policyv3.NewEvaluator()
 defaultPolicy := policyv3.NewDefaultPolicy("default")
 compiled, err := policyv3.NewCompiler().Compile(defaultPolicy)
@@ -95,7 +90,6 @@ log.Fatalf("❌ Error compilando policy: %v", err)
 policyEvaluator.Register(compiled)
 log.Printf("📋 Policy Engine: %d políticas", len(policyEvaluator.List()))
 
-// Accounting Service V3.6
 accountingSvc := accountingv3.NewService(pgClient.Usage(), pgClient.Budgets(), modelRegistry)
 accountingSvc.OnBudgetAlert(func(alert accountingv3.BudgetAlert) {
 logger.Warnf("🚨 BUDGET ALERT: tenant=%s threshold=%d%% spent=$%.2f/%.2f",
@@ -103,11 +97,16 @@ alert.TenantID, alert.Threshold, alert.Spent, alert.Limit)
 })
 log.Printf("💰 Accounting service iniciado")
 
+// Tracing V3.8
+traceStore := observabilityv3.NewStore(10000)
+log.Printf("🔍 Trace Store iniciado: %d capacity", 10000)
+
 identitySvc := identity.NewService(pgClient)
 authEnabled := os.Getenv("SENTINELFLOW_ENV") == "production"
 
 authMw := middleware.NewAuth(identitySvc, authEnabled)
 idempotencyMw := middleware.NewIdempotency(24 * time.Hour)
+tracingMw := middleware.NewTracingMiddleware(traceStore, true)
 policyMw := middleware.NewPolicyMiddleware(policyEvaluator, true)
 accountingMw := middleware.NewAccountingMiddleware(accountingSvc, true)
 normalizerSvc := normalizer.New()
@@ -116,8 +115,8 @@ r := mux.NewRouter()
 
 r.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
 w.Header().Set("Content-Type", "application/json")
-w.Write([]byte(fmt.Sprintf(`{"status":"ok","service":"sentinelflow-gateway","version":"%s","auth_enabled":%v,"providers":%d,"models":%d}`,
-version.String(), authEnabled, registry.Count(), len(modelRegistry.List()))))
+w.Write([]byte(fmt.Sprintf(`{"status":"ok","service":"sentinelflow-gateway","version":"%s","auth_enabled":%v,"providers":%d,"models":%d,"traces":%d}`,
+version.String(), authEnabled, registry.Count(), len(modelRegistry.List()), traceStore.Size())))
 }).Methods("GET")
 
 r.HandleFunc("/version", func(w http.ResponseWriter, req *http.Request) {
@@ -153,25 +152,47 @@ json.NewEncoder(w).Encode(map[string]interface{}{
 })
 }).Methods("GET")
 
-// FinOps endpoints V3.6
+// V3.8 Tracing endpoints
+r.HandleFunc("/v1/traces", func(w http.ResponseWriter, req *http.Request) {
+tenantID := req.URL.Query().Get("tenant")
+limit := 50
+if l := req.URL.Query().Get("limit"); l != "" {
+fmt.Sscanf(l, "%d", &limit)
+}
+traces := traceStore.ListByTenant(tenantID, limit)
+w.Header().Set("Content-Type", "application/json")
+json.NewEncoder(w).Encode(map[string]interface{}{
+"traces": traces,
+"total":  traceStore.Size(),
+})
+}).Methods("GET")
+
+r.HandleFunc("/v1/traces/{id}", func(w http.ResponseWriter, req *http.Request) {
+id := mux.Vars(req)["id"]
+trace, ok := traceStore.Get(id)
+if !ok {
+writeError(w, http.StatusNotFound, "not_found", "trace not found")
+return
+}
+w.Header().Set("Content-Type", "application/json")
+json.NewEncoder(w).Encode(trace)
+}).Methods("GET")
+
 r.HandleFunc("/v1/usage/stats", func(w http.ResponseWriter, req *http.Request) {
 tenantID := req.URL.Query().Get("tenant")
 if tenantID == "" {
 tenantID = "default"
 }
-
 daysStr := req.URL.Query().Get("days")
 days := 30
 if daysStr != "" {
 fmt.Sscanf(daysStr, "%d", &days)
 }
-
 stats, err := accountingSvc.Stats(req.Context(), tenantID, time.Duration(days)*24*time.Hour)
 if err != nil {
 writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 return
 }
-
 w.Header().Set("Content-Type", "application/json")
 json.NewEncoder(w).Encode(stats)
 }).Methods("GET")
@@ -221,9 +242,8 @@ writeError(w, http.StatusServiceUnavailable, "no_provider", err.Error())
 return
 }
 
-logger.Infof("🎯 Routing: %s → %s (score=%.3f, reason=%s, filtered=%d)",
-normReq.Model, decision.Selected.ProviderID, decision.Score.Total,
-decision.Reason, decision.Filtered)
+logger.Infof("🎯 Routing: %s → %s (score=%.3f, reason=%s)",
+normReq.Model, decision.Selected.ProviderID, decision.Score.Total, decision.Reason)
 
 provider, ok := registry.Get(decision.Selected.ProviderID)
 if !ok {
@@ -272,19 +292,17 @@ w.Header().Set("X-Routing-Reason", decision.Reason)
 w.Header().Set("X-Tenant-Id", tenantID)
 w.Header().Set("X-User-Id", userID)
 w.Header().Set("X-Api-Key-Id", apiKeyID)
-if decision.Experiment != "" {
-w.Header().Set("X-Experiment", decision.Experiment)
-}
 w.WriteHeader(http.StatusOK)
 json.NewEncoder(w).Encode(resp)
 })
 
-// Pipeline: auth → idempotency → policy → accounting → chat
 r.Handle("/v1/chat/completions",
 authMw.Handler(
 idempotencyMw.Handler(
+tracingMw.Handler(
 policyMw.Handler(
 accountingMw.Handler(chatHandler),
+),
 ),
 ),
 ),
@@ -303,11 +321,7 @@ signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
 go func() {
 log.Printf("✅ Gateway en http://localhost:8080")
-log.Printf("   Auth: %v", authEnabled)
-log.Printf("   Routing: intelligent")
-log.Printf("   Policy: enabled")
-log.Printf("   Security: PII + Secrets + Prompt + SSRF")
-log.Printf("   Accounting: enabled")
+log.Printf("   Tracing: enabled")
 if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 log.Fatalf("❌ Gateway error: %v", err)
 }
@@ -338,7 +352,6 @@ writeError(w, http.StatusInternalServerError, "streaming_not_supported", "stream
 return
 }
 
-start := time.Now()
 chunks, err := provider.Stream(req.Context(), chatReq)
 if err != nil {
 cb.RecordFailure()
@@ -349,18 +362,9 @@ return
 w.Header().Set("Content-Type", "text/event-stream")
 w.Header().Set("Cache-Control", "no-cache")
 w.Header().Set("Connection", "keep-alive")
-w.Header().Set("X-Accel-Buffering", "no")
 w.Header().Set("X-Provider", provider.ID())
-w.Header().Set("X-Routing-Score", fmt.Sprintf("%.3f", decision.Score.Total))
-w.Header().Set("X-Routing-Reason", decision.Reason)
-w.Header().Set("X-Tenant-Id", tenantID)
-w.Header().Set("X-User-Id", userID)
-w.Header().Set("X-Api-Key-Id", apiKeyID)
 w.WriteHeader(http.StatusOK)
 flusher.Flush()
-
-var ttft time.Duration
-totalChunks := 0
 
 for chunk := range chunks {
 select {
@@ -370,32 +374,16 @@ return
 default:
 }
 
-if totalChunks == 0 {
-ttft = time.Since(start)
-logger.Infof("⚡ TTFT: %dms", ttft.Milliseconds())
-}
-
-data, err := json.Marshal(map[string]interface{}{
-"id":      "chatcmpl-stream",
-"object":  "chat.completion.chunk",
-"created": time.Now().Unix(),
-"model":   chatReq.Model,
-"choices": []map[string]interface{}{
-{
-"index":         chunk.Index,
-"delta":         map[string]string{"content": chunk.Delta},
+data, _ := json.Marshal(map[string]interface{}{
+"id": "chatcmpl-stream", "object": "chat.completion.chunk",
+"created": time.Now().Unix(), "model": chatReq.Model,
+"choices": []map[string]interface{}{{
+"index": chunk.Index, "delta": map[string]string{"content": chunk.Delta},
 "finish_reason": chunk.FinishReason,
-},
-},
+}},
 })
-if err != nil {
-continue
-}
-
 fmt.Fprintf(w, "data: %s\n\n", string(data))
 flusher.Flush()
-totalChunks++
-
 if chunk.FinishReason != "" {
 break
 }
@@ -403,19 +391,13 @@ break
 
 fmt.Fprintf(w, "data: [DONE]\n\n")
 flusher.Flush()
-
 cb.RecordSuccess()
-logger.Infof("✅ Stream completed: %d chunks, TTFT=%dms, total=%dms",
-totalChunks, ttft.Milliseconds(), time.Since(start).Milliseconds())
 }
 
 func writeError(w http.ResponseWriter, status int, errType, message string) {
 w.Header().Set("Content-Type", "application/json")
 w.WriteHeader(status)
 json.NewEncoder(w).Encode(map[string]interface{}{
-"error": map[string]string{
-"type":    errType,
-"message": message,
-},
+"error": map[string]string{"type": errType, "message": message},
 })
 }
