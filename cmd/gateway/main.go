@@ -13,6 +13,7 @@ import (
 "time"
 
 "github.com/gorilla/mux"
+accountingv3 "github.com/lecodev-26/sentinelflow/internal/accounting/v3"
 "github.com/lecodev-26/sentinelflow/internal/gateway/v3/middleware"
 "github.com/lecodev-26/sentinelflow/internal/gateway/v3/normalizer"
 "github.com/lecodev-26/sentinelflow/internal/identity"
@@ -53,6 +54,13 @@ log.Fatalf("❌ Error conectando a PostgreSQL: %v", err)
 defer pgClient.Close()
 log.Printf("✅ PostgreSQL conectado")
 
+// Migraciones (aplica las nuevas tablas FinOps)
+if err := pgClient.Migrate(ctx); err != nil {
+log.Printf("⚠️ Error aplicando migraciones: %v", err)
+} else {
+log.Printf("✅ Migraciones aplicadas")
+}
+
 // Provider Registry
 registry := providers.NewRegistry()
 
@@ -77,7 +85,7 @@ routingEngine := routing.NewEngine(modelRegistry, manager, routing.DefaultWeight
 
 log.Printf("📊 Providers: %d, Models: %d", registry.Count(), len(modelRegistry.List()))
 
-// Policy Engine V3.5
+// Policy Engine
 policyEvaluator := policyv3.NewEvaluator()
 defaultPolicy := policyv3.NewDefaultPolicy("default")
 compiled, err := policyv3.NewCompiler().Compile(defaultPolicy)
@@ -87,12 +95,21 @@ log.Fatalf("❌ Error compilando policy: %v", err)
 policyEvaluator.Register(compiled)
 log.Printf("📋 Policy Engine: %d políticas", len(policyEvaluator.List()))
 
+// Accounting Service V3.6
+accountingSvc := accountingv3.NewService(pgClient.Usage(), pgClient.Budgets(), modelRegistry)
+accountingSvc.OnBudgetAlert(func(alert accountingv3.BudgetAlert) {
+logger.Warnf("🚨 BUDGET ALERT: tenant=%s threshold=%d%% spent=$%.2f/%.2f",
+alert.TenantID, alert.Threshold, alert.Spent, alert.Limit)
+})
+log.Printf("💰 Accounting service iniciado")
+
 identitySvc := identity.NewService(pgClient)
 authEnabled := os.Getenv("SENTINELFLOW_ENV") == "production"
 
 authMw := middleware.NewAuth(identitySvc, authEnabled)
 idempotencyMw := middleware.NewIdempotency(24 * time.Hour)
 policyMw := middleware.NewPolicyMiddleware(policyEvaluator, true)
+accountingMw := middleware.NewAccountingMiddleware(accountingSvc, true)
 normalizerSvc := normalizer.New()
 
 r := mux.NewRouter()
@@ -136,6 +153,29 @@ json.NewEncoder(w).Encode(map[string]interface{}{
 })
 }).Methods("GET")
 
+// FinOps endpoints V3.6
+r.HandleFunc("/v1/usage/stats", func(w http.ResponseWriter, req *http.Request) {
+tenantID := req.URL.Query().Get("tenant")
+if tenantID == "" {
+tenantID = "default"
+}
+
+daysStr := req.URL.Query().Get("days")
+days := 30
+if daysStr != "" {
+fmt.Sscanf(daysStr, "%d", &days)
+}
+
+stats, err := accountingSvc.Stats(req.Context(), tenantID, time.Duration(days)*24*time.Hour)
+if err != nil {
+writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+return
+}
+
+w.Header().Set("Content-Type", "application/json")
+json.NewEncoder(w).Encode(stats)
+}).Methods("GET")
+
 chatHandler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 body, err := io.ReadAll(req.Body)
 if err != nil {
@@ -157,7 +197,6 @@ apiKeyID := middleware.GetAPIKeyID(req.Context())
 logger.Infof("📨 Request: tenant=%s user=%s format=%s model=%s stream=%v",
 tenantID, userID, format, normReq.Model, normReq.Stream)
 
-// Routing request
 routeReq := &routing.Request{
 RequestID: req.Header.Get("Idempotency-Key"),
 Model:     normReq.Model,
@@ -169,7 +208,6 @@ if normReq.Stream {
 routeReq.RequiredCapabilities = []string{"stream"}
 }
 
-// Aplicar routing policy si existe
 if policyResult, ok := middleware.GetPolicyResult(req.Context()); ok && policyResult.Routing != nil {
 routeReq.RequiredCapabilities = append(routeReq.RequiredCapabilities, policyResult.Routing.RequiredCapabilities...)
 routeReq.PreferredProvider = policyResult.Routing.PreferredProvider
@@ -241,10 +279,13 @@ w.WriteHeader(http.StatusOK)
 json.NewEncoder(w).Encode(resp)
 })
 
+// Pipeline: auth → idempotency → policy → accounting → chat
 r.Handle("/v1/chat/completions",
 authMw.Handler(
 idempotencyMw.Handler(
-policyMw.Handler(chatHandler),
+policyMw.Handler(
+accountingMw.Handler(chatHandler),
+),
 ),
 ),
 ).Methods("POST")
@@ -266,6 +307,7 @@ log.Printf("   Auth: %v", authEnabled)
 log.Printf("   Routing: intelligent")
 log.Printf("   Policy: enabled")
 log.Printf("   Security: PII + Secrets + Prompt + SSRF")
+log.Printf("   Accounting: enabled")
 if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 log.Fatalf("❌ Gateway error: %v", err)
 }
