@@ -1,225 +1,137 @@
-<div align="center">
+# 🛡️ SentinelFlow V3
 
-# 🛡️ SentinelFlow
+**AI Gateway & Model Control Plane**
 
-**AI Gateway & Control Plane para aplicaciones multi-LLM**
-
-[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=for-the-badge&logo=go)](https://go.dev/)
+[![Go Version](https://img.shields.io/badge/Go-1.27-00ADD8?style=for-the-badge&logo=go)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge)](http://makeapullrequest.com)
-[![Stars](https://img.shields.io/github/stars/lecodev-26/sentinelflow?style=for-the-badge&color=gold)](https://github.com/lecodev-26/sentinelflow/stargazers)
-
-</div>
-
----
+[![Version](https://img.shields.io/badge/version-3.0.0-blue?style=for-the-badge)](https://github.com/lecodev-26/sentinelflow)
 
 ## 📖 ¿Qué es SentinelFlow?
 
-**SentinelFlow** es un **AI Gateway** que actúa como capa de control para aplicaciones que consumen LLMs. Pones SentinelFlow entre tu aplicación y los proveedores de IA (OpenAI, Anthropic, Llama, etc.) y él decide a qué proveedor enviar cada petición, hace failover si uno falla, aplica rate limiting, cachea respuestas y expone métricas en tiempo real.
+SentinelFlow es un **AI Gateway + Model Control Plane** de nivel empresarial.
 
-### 🎯 ¿Por qué lo necesitas?
+### Data Plane
+- ✅ **Routing con scoring** (latencia 0.35 + coste 0.25 + health 0.25 + quality 0.15)
+- ✅ **Circuit breaker** por provider con auto-recovery
+- ✅ **Streaming SSE real** end-to-end
+- ✅ **Idempotency** con `Idempotency-Key`
+- ✅ **Multi-provider**: OpenAI, Anthropic, Ollama
 
-| Problema | Solución |
-|----------|----------|
-| 🔴 **OpenAI falló** | ✅ SentinelFlow cambia automáticamente a Anthropic |
-| 🔴 **Anthropic está lento** | ✅ SentinelFlow usa Local Llama |
-| 🔴 **Muchas peticiones** | ✅ SentinelFlow cachea respuestas y ahorra dinero |
-| 🔴 **Costes descontrolados** | ✅ SentinelFlow trackea costes y aplica budgets |
-| 🔴 **Fugas de datos** | ✅ SentinelFlow detecta PII y secretos |
+### Control Plane
+- ✅ **PostgreSQL (Supabase)** como source of truth
+- ✅ **Multi-tenant** con API keys + scopes
+- ✅ **Policy Engine** versionado
+- ✅ **OIDC + SCIM 2.0**
+- ✅ **Regional routing** + GDPR
 
----
+### Seguridad
+- ✅ **PII detection**: email, phone, credit card, SSN, IPv4
+- ✅ **Secret detection**: OpenAI, Anthropic, AWS, GitHub, keys
+- ✅ **Prompt injection**: jailbreak, override, reveal
+- ✅ **SSRF protection**: localhost, private IPs, cloud metadata
+- ✅ **Auto-redaction** de PII
 
-## ✨ Características
+### FinOps
+- ✅ **Usage tracking** con tokens reales
+- ✅ **Budgets** por tenant con forecasts
+- ✅ **Alertas** 80/90/100%
 
-| Característica | Descripción |
-|----------------|-------------|
-| ⚡ **Failover Automático** | Si un proveedor falla, cambia al siguiente sin intervención |
-| 🎯 **Smart Routing** | Elige el mejor proveedor por coste, latencia y salud |
-| 📊 **Cost Intelligence** | Trackeo de costes, budgets y alertas |
-| 🛡️ **Seguridad** | PII detection, secret detection, prompt injection |
-| 📝 **Audit Logs** | Registro completo de todas las peticiones |
-| 💾 **Caché Semántica** | Cachea respuestas por similitud (embeddings) |
-| 🔐 **Multi-tenancy** | Organizaciones, proyectos y RBAC |
-| 📈 **Observabilidad** | OpenTelemetry, métricas, TTFT, tracing |
-| 🚀 **Escalabilidad** | Kubernetes, Helm, HPA |
+### Observability
+- ✅ **Trace Store** con spans por etapa
+- ✅ **Request timeline** (`/v1/traces/{id}`)
+- ✅ **Structured logs** con request_id + trace_id
 
----
+### HA/DR
+- ✅ **Liveness + Readiness** (`/livez`, `/readyz`)
+- ✅ **Graceful shutdown** con drain
+- ✅ **Backup automático** + DR tests
 
-## 🚀 Inicio rápido
-
-### Con Go
+## 🚀 Quick Start
 
 ```bash
-# Clonar
 git clone https://github.com/lecodev-26/sentinelflow.git
 cd sentinelflow
+go mod download
 
-# Instalar dependencias
-go mod tidy
+cat > .env << 'EOF'
+SENTINELFLOW_DATABASE_URL=postgresql://...
+SENTINELFLOW_ENV=development
+SENTINELFLOW_VAULT_KEY=your-vault-key
+EOF
 
-# Ejecutar
-make run
+# Gateway (puerto 8080)
+go run cmd/gateway/main.go
+
+# Control Plane (puerto 8081)
+go run cmd/controlplane/main.go
 ```
 
-Con Docker
+📡 Endpoints
 
-```bash
-docker run -p 8080:8080 sentinelflow:latest
-```
+Gateway (8080)
 
-Con Kubernetes
+Método Endpoint Descripción
+GET /livez Liveness probe
+GET /readyz Readiness probe
+GET /health Health completo
+GET /v1/providers Estado de providers
+GET /v1/models Catálogo con pricing
+GET /v1/traces Últimos traces
+GET /v1/traces/{id} Trace completo
+GET /v1/usage/stats Estadísticas de uso
+POST /v1/chat/completions Chat con routing inteligente
 
-```bash
-helm install sentinelflow ./deployments/helm/sentinelflow
-```
+Control Plane (8081)
 
-Con Terraform
-
-```bash
-cd deployments/terraform
-terraform apply
-```
-
----
-
-🌐 Accede a los servicios
-
-Servicio URL
-Proxy http://localhost:8080
-Dashboard http://localhost:8080/dashboard
-Demo http://localhost:8080/demo
-Métricas http://localhost:9090/metrics
-Health Check http://localhost:8080/health
-
----
-
-🔧 Configuración
-
-Edita configs/rules.yaml para personalizar:
-
-```yaml
-providers:
-  - name: openai
-    url: "https://api.openai.com/v1"
-    fallback: anthropic
-    headers:
-      Authorization: "Bearer ${OPENAI_API_KEY}"
-
-  - name: anthropic
-    url: "https://api.anthropic.com/v1"
-    fallback: local-llama
-    headers:
-      x-api-key: "${ANTHROPIC_API_KEY}"
-
-  - name: local-llama
-    url: "http://localhost:11434/api"
-    fallback: ""
-
-rules:
-  - path: "/v1/chat/completions"
-    method: "POST"
-    cache: true
-    providers: ["openai", "anthropic", "local-llama"]
-```
-
-🔑 Variables de entorno
-
-```bash
-export OPENAI_API_KEY="sk-tu-key-aqui"
-export ANTHROPIC_API_KEY="ant-tu-key-aqui"
-```
-
----
+Método Endpoint Descripción
+GET/POST /v1/organizations Organizaciones
+GET/POST /v1/projects Proyectos
+GET/POST /v1/users Usuarios
+POST /v1/users/{id}/api-keys API keys
+GET /auth/oidc/providers OIDC providers
+GET /auth/oidc/{provider}/login OIDC login
+GET/POST /scim/v2/Users SCIM 2.0
 
 🏗️ Arquitectura
 
-```marckdown
-┌─────────────┐     ┌─────────────────────────────────────────────────────┐
-│   Clientes  │────▶│                  SentinelFlow                       │
-│   Agents    │     │                                                     │
-│   Apps      │     │  ┌─────────┐  ┌─────────┐  ┌─────────┐            │
-│   SDKs      │     │  │Security │  │ Router  │  │Policies │            │
-└─────────────┘     │  └────┬────┘  └────┬────┘  └────┬────┘            │
-                    │       │            │            │                   │
-                    │       └────────────┼────────────┘                   │
-                    │                    ▼                                │
-                    │           ┌────────────────┐                       │
-                    │           │ Cost Intelligence│                      │
-                    │           └────────────────┘                       │
-                    │                    │                                │
-                    │                    ▼                                │
-                    │           ┌────────────────┐                       │
-                    │           │ Observability  │                       │
-                    │           └────────────────┘                       │
-                    └─────────────────────────────────────────────────────┘
-                                        │
-                    ┌───────────────────┼───────────────────┐
-                    ▼                   ▼                   ▼
-             ┌───────────┐      ┌───────────┐      ┌───────────┐
-             │  OpenAI   │      │ Anthropic │      │ Local     │
-             └───────────┘      └───────────┘      └───────────┘
+```
+              Clients
+                 │
+                 ▼
+        ┌────────────────┐
+        │    GATEWAY     │
+        │  (stateless)   │
+        │                │
+        │ auth → trace   │
+        │ policy → sec   │
+        │ routing → acc  │
+        └────────┬───────┘
+                 │
+    ┌────────────┼────────────┐
+    ▼            ▼            ▼
+ OpenAI      Anthropic     Ollama
+    │            │            │
+    └────────────┼────────────┘
+                 │
+                 ▼
+        ┌────────────────┐
+        │   PostgreSQL   │
+        │   (Supabase)   │
+        │ Source of Truth│
+        └────────────────┘
 ```
 
----
+📊 Milestones
 
-🛠️ Tecnologías
-```marckdown
-Tecnología Uso
-Go 1.21 Lenguaje principal
-Gorilla Mux Router HTTP
-Prometheus Métricas y monitoreo
-OpenTelemetry Tracing distribuido
-Redis Caché distribuida
-Kubernetes Orquestación
-Helm Despliegue
-Terraform Infraestructura como código
-```
----
+Versión Highlights
+v3.0.0 Control Plane, Routing, FinOps, Enterprise, HA/DR
+v2.10.0 Production ready
+v1.0.0 Gateway con failover
 
-📋 Roadmap
-```marckdown
-Estado Funcionalidad
-✅ Proxy con failover automático
-✅ Dashboard en tiempo real
-✅ Métricas Prometheus
-✅ Rate Limiting
-✅ Smart Routing (coste, latencia, salud)
-✅ Caché en memoria y distribuida (Redis)
-✅ Logs estructurados
-✅ OpenTelemetry tracing
-✅ PII / Secret Detection
-✅ Prompt Injection Detection
-✅ Audit Logs
-✅ Policy Engine
-✅ Multi-tenancy + RBAC
-✅ Kubernetes + Helm + Terraform
-✅ Cost Tracking + Budgets
-✅ Semantic Cache
-✅ Demo interactiva
-```
----
+📄 License
 
-🤝 Contribuciones
+MIT — ver LICENSE.
 
-¡Las contribuciones son bienvenidas!
+⭐ ¿Te gusta?
 
-1. Fork el repositorio
-2. Crea una rama: git checkout -b feature/nueva-funcionalidad
-3. Haz commit: git commit -m "Añadir nueva funcionalidad"
-4. Push: git push origin feature/nueva-funcionalidad
-5. Abre un Pull Request
-
----
-
-📄 Licencia
-
-MIT License - ver LICENSE para más detalles.
-
----
-
-<div align="center">
-
-⭐ ¡Si te ha sido útil, dale una estrella! ⭐
-
-
-</div>
+¡Dale una estrella en GitHub!

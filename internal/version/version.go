@@ -8,7 +8,7 @@ import (
 
 // Build information - set via ldflags at build time
 var (
-Version   = "3.0.0-dev"
+Version   = "3.0.0"
 Commit    = "unknown"
 BuildTime = "unknown"
 GoVersion = runtime.Version()

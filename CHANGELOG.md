@@ -1,101 +1,84 @@
 # Changelog
 
-Todas las versiones notables de SentinelFlow se documentan en este archivo.
+## [3.0.0] - 2026-09-22
 
-El formato sigue [Keep a Changelog](https://keepachangelog.com/es/1.1.0/),
-y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
+### 🎉 SentinelFlow V3 - AI Gateway + Model Control Plane
 
-## [Unreleased]
+Reescritura completa con arquitectura de 3 planos.
 
-## [1.0.0] - 2026-09-16
+### Added
 
-### Añadido
+#### Foundation (V3.0)
+- `internal/version`: single source of truth
+- `internal/config/v3`: static/dynamic/secrets separation
+- `internal/storage/postgres`: pgx pool + migraciones embebidas
+- Nueva estructura `cmd/`: gateway, controlplane, worker, cli
 
-#### Core Gateway
-- Pipeline unificado con RequestContext
-- Provider Runtime con Registry
-- Smart Router con estrategias (health, latency, cost)
-- Circuit Breaker por provider
-- Retry con backoff exponencial y jitter
-- Failover automático entre providers
+#### Identity (V3.1)
+- Repositorios persistentes: organizations, projects, users, api_keys
+- API keys SHA-256 + scopes + TTL + rotation
 
-#### Seguridad
-- API keys hasheadas con SHA-256
-- RBAC (Admin, Editor, Viewer, Member)
-- Organizaciones y proyectos (multi-tenancy)
-- PII detection y redacción
-- Secret detection (API keys, AWS, contraseñas)
-- Prompt injection detection
-- SSRF protection (bloquea localhost, IPs privadas, metadata)
-- Audit logs
-- Policy engine con reglas dinámicas
+#### Gateway Core (V3.2)
+- RequestNormalizer: OpenAI/Anthropic/Gemini
+- AuthMiddleware contra PostgreSQL
+- IdempotencyMiddleware
+- Streaming SSE real
 
-#### Resiliencia
-- Health monitor en background
-- Circuit breaker con estados (closed/open/half-open)
-- Rate limiting (IP, tenant, user)
-- Quotas por tenant (req/min, tokens/min, tokens/mes)
-- Request limits (1MB body, 16KB headers)
+#### Provider Platform (V3.3)
+- Interface Provider con Chat/Stream/Health/Models
+- Registry thread-safe
+- Health monitor cada 30s
+- Circuit breaker por provider
+- Adapters: OpenAI, Anthropic, Ollama
+
+#### Routing Intelligence (V3.4)
+- Model Registry con 9 modelos + pricing real
+- Scoring: latency 0.35 + cost 0.25 + health 0.25 + quality 0.15
+- Filters + Experiments (A/B, canary)
+
+#### Policy & Security (V3.5)
+- Policy Engine versionado
+- PII, Secret, Prompt Injection, SSRF scanners
+- Auto-redaction
+
+#### FinOps (V3.6)
+- usage_records + budgets
+- UsageRepo + BudgetRepo
+- Alerts 80/90/100%
+
+#### Enterprise (V3.7)
+- OIDC (5 providers)
+- SCIM 2.0
+- Regional routing + GDPR
+
+#### Observability (V3.8)
+- Trace Store con rotación
+- Request timeline
+- X-Trace-Id header
+
+#### HA/DR (V3.9)
+- /livez /readyz probes
 - Graceful shutdown
+- Backup + DR tests
 
-#### Cost Intelligence
-- Cost tracking por request con tokens reales
-- Pricing registry por provider/model
-- Budgets por tenant ($100/mes por defecto)
-- Alertas en 80%, 90%, 100%
+### Fixed
+- Race condition en Cache.Get()
+- Race condition en ValidateAPIKey()
+- Snapshot() no copia mutex
+- Migración 0005 sin expression index no-inmutable
 
-#### Cache
-- Cache determinista con keys versionadas
-- Cache semántica con embeddings
-- L1 (memoria) + L2 (Redis)
-- Invalidación por tenant/project
-
-#### Observabilidad
-- OpenTelemetry tracing
-- Métricas Prometheus (requests, latencia, tokens, cost)
-- TTFT (Time To First Token)
-- Logs estructurados sin PII
-- Correlation ID entre logs/traces/métricas
-
-#### Control Plane
-- API administrativa en puerto separado
-- Endpoints de métricas reales
-- Organizaciones, usuarios, API keys
-- Providers, circuit breakers, budgets
-
-#### Dashboard
-- UI glassmorphism minimalista
-- Modo oscuro/claro con persistencia
-- Command palette (Ctrl+K)
-- Gráficos con Chart.js
-- Auto-refresh cada 5s
-- Export de métricas a JSON
-
-#### Deployment
-- Dockerfile distroless nonroot
-- Docker-compose con Redis + Prometheus + Grafana
-- Kubernetes manifests con PDB, probes, resource limits
-- Helm chart parametrizado
-- Terraform para infraestructura como código
-
-#### Testing
-- Unit tests (config, rbac, ssrf, provider)
-- Fuzzing tests (ChatRequest, Message)
-- E2E tests (routing, chaos, security)
-- CI con race detector, gosec, govulncheck, trivy
-
-### Documentación
-- README completo con arquitectura
-- CHANGELOG
-- API reference
+### Security
+- API keys SHA-256 hasheadas
+- Idempotency-Key anti-duplicados
+- SSRF protection metadata cloud
+- PII auto-redaction
 
 ---
 
-## Tipos de cambios
+## [2.0.0] - 2026-09-16
 
-- `Añadido` para nuevas características
-- `Cambiado` para cambios en funcionalidad existente
-- `Obsoleto` para características que serán removidas
-- `Eliminado` para características removidas
-- `Corregido` para bugs
-- `Seguridad` para vulnerabilidades
+Gateway Pipeline, Events bus, Auth mandatory, Multi-tenancy, Cost tracking, OTel, Docker+K8s+Helm+Terraform.
+
+## [1.0.0] - 2026-08
+
+Gateway con failover entre providers, Smart routing, Cache, Métricas, Dashboard.
