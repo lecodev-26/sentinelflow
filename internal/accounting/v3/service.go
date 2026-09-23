@@ -61,13 +61,7 @@ func (s *Service) OnBudgetAlert(cb func(BudgetAlert)) {
 // El budget se actualiza fuera de TX porque es recalculable desde usage_records.
 func (s *Service) Record(ctx context.Context, rec *postgres.UsageRecord) error {
 	// Calcular coste con pricing real del Model Registry
-	if s.modelReg != nil && rec.Provider != "" && rec.Model != "" {
-		if model, ok := s.modelReg.Get(rec.Provider, rec.Model); ok {
-			rec.InputCostUSD = (float64(rec.InputTokens) / 1_000_000.0) * model.InputPer1M
-			rec.OutputCostUSD = (float64(rec.OutputTokens) / 1_000_000.0) * model.OutputPer1M
-			rec.CostUSD = rec.InputCostUSD + rec.OutputCostUSD
-		}
-	}
+	computeCost(s.modelReg, rec)
 
 	// Persistir uso + evento en la misma TX (si hay outbox)
 	if s.outbox != nil && s.client != nil {
@@ -203,4 +197,25 @@ func (s *Service) Stats(ctx context.Context, tenantID string, since time.Duratio
 		ByModel:    byModel,
 		ByDay:      byDay,
 	}, nil
+}
+
+// computeCost calcula el coste USD de un UsageRecord basándose en el
+// ModelRegistry. Es una función pura (sin DB, sin estado) para testear.
+//
+// Si modelReg es nil, Provider o Model están vacíos, o el modelo no está
+// registrado, no modifica el record.
+func computeCost(reg *routing.ModelRegistry, rec *postgres.UsageRecord) {
+	if reg == nil || rec == nil {
+		return
+	}
+	if rec.Provider == "" || rec.Model == "" {
+		return
+	}
+	model, ok := reg.Get(rec.Provider, rec.Model)
+	if !ok {
+		return
+	}
+	rec.InputCostUSD = (float64(rec.InputTokens) / 1_000_000.0) * model.InputPer1M
+	rec.OutputCostUSD = (float64(rec.OutputTokens) / 1_000_000.0) * model.OutputPer1M
+	rec.CostUSD = rec.InputCostUSD + rec.OutputCostUSD
 }
