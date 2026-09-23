@@ -1,0 +1,1 @@
+[... el SQL de arriba ...]
