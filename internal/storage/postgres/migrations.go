@@ -131,3 +131,41 @@ checksum TEXT
 
 	return nil
 }
+
+// MigrationStatus devuelve el estado de cada migración (aplicada o pendiente).
+// Ordenado por versión ascendente.
+func (c *Client) MigrationStatus(ctx context.Context) ([]MigrationReport, error) {
+	migrations, err := LoadMigrations()
+	if err != nil {
+		return nil, err
+	}
+
+	applied := make(map[int]bool)
+	rows, err := c.Query(ctx, "SELECT version FROM schema_migrations")
+	if err == nil {
+		for rows.Next() {
+			var v int
+			if err := rows.Scan(&v); err == nil {
+				applied[v] = true
+			}
+		}
+		rows.Close()
+	}
+
+	out := make([]MigrationReport, 0, len(migrations))
+	for _, m := range migrations {
+		out = append(out, MigrationReport{
+			Version: m.Version,
+			Name:    m.Name,
+			Applied: applied[m.Version],
+		})
+	}
+	return out, nil
+}
+
+// MigrationReport es una entrada del estado de migraciones.
+type MigrationReport struct {
+	Version int
+	Name    string
+	Applied bool
+}
