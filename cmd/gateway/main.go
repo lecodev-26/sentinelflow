@@ -266,6 +266,31 @@ func main() {
 		),
 	).Methods("GET")
 
+	// --- /v1/audit (auth + scope audit:read + tenant isolation) ---
+	r.Handle("/v1/audit",
+		authMw.Handler(
+			middleware.RequireScope(rbac.ScopeReadAudit)(
+				http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+					tenantID := middleware.GetTenantID(req.Context())
+					limit := 50
+					if l := req.URL.Query().Get("limit"); l != "" {
+						fmt.Sscanf(l, "%d", &limit)
+					}
+					entries, err := pgClient.Audit().ListByTenant(req.Context(), tenantID, limit)
+					if err != nil {
+						writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+						return
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(map[string]interface{}{
+						"entries": entries,
+						"total":   len(entries),
+					})
+				}),
+			),
+		),
+	).Methods("GET")
+
 	// --- /v1/usage/stats (auth + scope usage:read + tenant isolation) ---
 	r.Handle("/v1/usage/stats",
 		authMw.Handler(

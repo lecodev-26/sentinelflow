@@ -12,6 +12,8 @@ const (
 	ScopeReadAdmin     Scope = "admin:read"
 	ScopeReadTraces    Scope = "traces:read"
 	ScopeReadMetrics   Scope = "metrics:read"
+	ScopeReadAudit     Scope = "audit:read"
+	ScopeReadAnalytics Scope = "analytics:read"
 
 	// Scopes de escritura
 	ScopeWriteChat      Scope = "chat:write"
