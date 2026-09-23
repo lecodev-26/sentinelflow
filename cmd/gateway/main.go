@@ -117,15 +117,30 @@ func main() {
 
 	// === Identity ===
 	identitySvc := identity.NewService(pgClient)
+
+	// Fail-safe auth:
+	//   - env vacío o != development  => auth ON
+	//   - env == development           => auth OFF solo si SF_ALLOW_DEV_AUTH=yes
+	//   - cualquier otro caso         => auth ON (aunque env sea development)
 	env := os.Getenv("SENTINELFLOW_ENV")
+	allowDevAuth := os.Getenv("SF_ALLOW_DEV_AUTH") == "yes"
+
 	if env == "" {
-		log.Printf("⚠️  SENTINELFLOW_ENV not set — auth ENABLED by default (fail-safe). Set SENTINELFLOW_ENV=development to disable.")
+		log.Printf("⚠️  SENTINELFLOW_ENV not set — auth ENABLED by default (fail-safe).")
 	}
-	authEnabled := env != "development"
+
+	authEnabled := true
+	if env == "development" && allowDevAuth {
+		authEnabled = false
+	}
+	if env == "development" && !allowDevAuth {
+		log.Printf("🚨 SENTINELFLOW_ENV=development but SF_ALLOW_DEV_AUTH!=yes → auth stays ENABLED. Set SF_ALLOW_DEV_AUTH=yes explicitly for local dev.")
+	}
+
 	if authEnabled {
-		log.Printf("🔒 Auth: ENABLED (env=%s)", env)
+		log.Printf("🔒 Auth: ENABLED (env=%q dev_allowed=%v)", env, allowDevAuth)
 	} else {
-		log.Printf("🔓 Auth: DISABLED (env=%s, dev only)", env)
+		log.Printf("🔓 Auth: DISABLED (env=development dev_allowed=yes, local only)")
 	}
 
 	// === Middlewares ===
