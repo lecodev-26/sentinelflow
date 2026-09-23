@@ -245,61 +245,69 @@ func isValidRole(role string) bool {
 // UpdateUser actualiza un usuario existente.
 // Solo actualiza los campos no vacíos.
 func (s *Service) UpdateUser(ctx context.Context, id string, updates UserUpdates) (*postgres.User, error) {
-if id == "" {
-return nil, errors.New("user id is required")
-}
+	if id == "" {
+		return nil, errors.New("user id is required")
+	}
 
-user, err := s.users.GetByID(ctx, id)
-if err != nil {
-return nil, errors.New("user not found")
-}
+	user, err := s.users.GetByID(ctx, id)
+	if err != nil {
+		return nil, errors.New("user not found")
+	}
 
-// Aplicar cambios solo si vienen definidos
-if updates.Name != nil {
-name := strings.TrimSpace(*updates.Name)
-if name == "" {
-return nil, errors.New("name cannot be empty")
-}
-user.Name = name
-}
+	// Aplicar cambios solo si vienen definidos
+	if updates.Name != nil {
+		name := strings.TrimSpace(*updates.Name)
+		if name == "" {
+			return nil, errors.New("name cannot be empty")
+		}
+		user.Name = name
+	}
 
-if updates.Email != nil {
-email := strings.TrimSpace(strings.ToLower(*updates.Email))
-if email == "" || !strings.Contains(email, "@") {
-return nil, errors.New("invalid email")
-}
-// Verificar que el nuevo email no esté en uso
-if email != user.Email {
-if existing, err := s.users.GetByEmail(ctx, email); err == nil && existing.ID != user.ID {
-return nil, errors.New("email already exists")
-}
-}
-user.Email = email
-}
+	if updates.Email != nil {
+		email := strings.TrimSpace(strings.ToLower(*updates.Email))
+		if email == "" || !strings.Contains(email, "@") {
+			return nil, errors.New("invalid email")
+		}
+		// Verificar que el nuevo email no esté en uso
+		if email != user.Email {
+			if existing, err := s.users.GetByEmail(ctx, email); err == nil && existing.ID != user.ID {
+				return nil, errors.New("email already exists")
+			}
+		}
+		user.Email = email
+	}
 
-if updates.Role != nil {
-if !isValidRole(*updates.Role) {
-return nil, fmt.Errorf("invalid role: %s", *updates.Role)
-}
-user.Role = *updates.Role
-}
+	if updates.Role != nil {
+		if !isValidRole(*updates.Role) {
+			return nil, fmt.Errorf("invalid role: %s", *updates.Role)
+		}
+		user.Role = *updates.Role
+	}
 
-if updates.Active != nil {
-user.Active = *updates.Active
-}
+	if updates.Active != nil {
+		user.Active = *updates.Active
+	}
 
-if err := s.users.Update(ctx, user); err != nil {
-return nil, fmt.Errorf("failed to update user: %w", err)
-}
+	if err := s.users.Update(ctx, user); err != nil {
+		return nil, fmt.Errorf("failed to update user: %w", err)
+	}
 
-return user, nil
+	return user, nil
 }
 
 // UserUpdates representa los campos actualizables de un usuario.
 // Los punteros permiten distinguir "no enviado" de "enviado como vacío".
 type UserUpdates struct {
-Name   *string `json:"name,omitempty"`
-Email  *string `json:"email,omitempty"`
-Role   *string `json:"role,omitempty"`
-Active *bool   `json:"active,omitempty"`
+	Name   *string `json:"name,omitempty"`
+	Email  *string `json:"email,omitempty"`
+	Role   *string `json:"role,omitempty"`
+	Active *bool   `json:"active,omitempty"`
+}
+
+// GetUserByEmail devuelve un usuario por email
+func (s *Service) GetUserByEmail(ctx context.Context, email string) (*postgres.User, error) {
+	if email == "" {
+		return nil, errors.New("email is required")
+	}
+	return s.users.GetByEmail(ctx, strings.ToLower(strings.TrimSpace(email)))
 }

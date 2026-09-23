@@ -39,6 +39,7 @@ type Flow struct {
 type stateEntry struct {
 	CreatedAt time.Time
 	Redirect  string
+	Nonce     string
 }
 
 // NewFlow crea un nuevo flow
@@ -63,12 +64,15 @@ func (f *Flow) BuildAuthURL(provider Provider, redirectAfterLogin string) (strin
 		return "", errors.New("provider endpoints not found")
 	}
 
-	// Generar state
+	// Generar state + nonce
 	state := generateState()
+	nonce := generateState()
+
 	f.mu.Lock()
 	f.states[state] = stateEntry{
 		CreatedAt: time.Now(),
 		Redirect:  redirectAfterLogin,
+		Nonce:     nonce,
 	}
 	f.mu.Unlock()
 
@@ -79,25 +83,26 @@ func (f *Flow) BuildAuthURL(provider Provider, redirectAfterLogin string) (strin
 	params.Set("response_type", "code")
 	params.Set("scope", strings.Join(cfg.Scopes, " "))
 	params.Set("state", state)
+	params.Set("nonce", nonce)
 
 	return ep.AuthURL + "?" + params.Encode(), nil
 }
 
-// ValidateState valida el state OAuth
-func (f *Flow) ValidateState(state string) (string, bool) {
+// ValidateState valida el state OAuth y devuelve el redirect + nonce
+func (f *Flow) ValidateState(state string) (redirect string, nonce string, ok bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	entry, ok := f.states[state]
-	if !ok {
-		return "", false
+	entry, exists := f.states[state]
+	if !exists {
+		return "", "", false
 	}
 	if time.Since(entry.CreatedAt) > 10*time.Minute {
 		delete(f.states, state)
-		return "", false
+		return "", "", false
 	}
 	delete(f.states, state)
-	return entry.Redirect, true
+	return entry.Redirect, entry.Nonce, true
 }
 
 // CreateSession crea una nueva sesión
