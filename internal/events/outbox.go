@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -12,64 +13,60 @@ import (
 )
 
 // Outbox implementa el patrón Transactional Outbox sobre PostgreSQL.
-//
-// Separación de responsabilidades:
-//   - Writer:    lo usa el código de negocio DENTRO de su transacción.
-//   - Publisher: worker que lee la tabla y publica al EventBus.
-//   - Consumer:  idempotente, del otro lado del bus (no está aquí).
 type Outbox struct {
 	pool *pgxpool.Pool
 	bus  EventBus
 
-	// Configuración del publisher
-	pollInterval time.Duration
-	batchSize    int
-	maxAttempts  int
-	baseBackoff  time.Duration
-	maxBackoff   time.Duration
+	pollInterval   time.Duration
+	batchSize      int
+	maxAttempts    int
+	baseBackoff    time.Duration
+	maxBackoff     time.Duration
+	jitterFraction float64
+	stuckThreshold time.Duration
 }
 
 // OutboxConfig agrupa la configuración del publisher.
 type OutboxConfig struct {
-	PollInterval time.Duration
-	BatchSize    int
-	MaxAttempts  int
-	BaseBackoff  time.Duration
-	MaxBackoff   time.Duration
+	PollInterval   time.Duration
+	BatchSize      int
+	MaxAttempts    int
+	BaseBackoff    time.Duration
+	MaxBackoff     time.Duration
+	JitterFraction float64
+	StuckThreshold time.Duration
 }
 
-// DefaultOutboxConfig devuelve valores razonables para producción.
 func DefaultOutboxConfig() OutboxConfig {
 	return OutboxConfig{
-		PollInterval: 500 * time.Millisecond,
-		BatchSize:    100,
-		MaxAttempts:  10,
-		BaseBackoff:  2 * time.Second,
-		MaxBackoff:   5 * time.Minute,
+		PollInterval:   500 * time.Millisecond,
+		BatchSize:      100,
+		MaxAttempts:    10,
+		BaseBackoff:    2 * time.Second,
+		MaxBackoff:     5 * time.Minute,
+		JitterFraction: 0.2,
+		StuckThreshold: 5 * time.Minute,
 	}
 }
 
-// NewOutbox crea una instancia de Outbox.
 func NewOutbox(pool *pgxpool.Pool, bus EventBus, cfg OutboxConfig) *Outbox {
 	return &Outbox{
-		pool:         pool,
-		bus:          bus,
-		pollInterval: cfg.PollInterval,
-		batchSize:    cfg.BatchSize,
-		maxAttempts:  cfg.MaxAttempts,
-		baseBackoff:  cfg.BaseBackoff,
-		maxBackoff:   cfg.MaxBackoff,
+		pool:           pool,
+		bus:            bus,
+		pollInterval:   cfg.PollInterval,
+		batchSize:      cfg.BatchSize,
+		maxAttempts:    cfg.MaxAttempts,
+		baseBackoff:    cfg.BaseBackoff,
+		maxBackoff:     cfg.MaxBackoff,
+		jitterFraction: cfg.JitterFraction,
+		stuckThreshold: cfg.StuckThreshold,
 	}
 }
 
 // =============================================================================
-// WRITER — se llama DENTRO de la transacción de negocio
+// WRITER
 // =============================================================================
 
-// EnqueueTx inserta un evento en el outbox usando la TX del llamante.
-//
-// IMPORTANTE: debe invocarse en la MISMA transacción que el cambio de negocio.
-// Si la TX falla, el evento desaparece con ella (correcto).
 func (o *Outbox) EnqueueTx(ctx context.Context, tx pgx.Tx, ev Event) error {
 	payloadJSON, err := json.Marshal(ev.Payload)
 	if err != nil {
@@ -94,13 +91,8 @@ ON CONFLICT (event_id) DO NOTHING
 `
 
 	_, err = tx.Exec(ctx, q,
-		ev.ID,
-		ev.Type,
-		ev.TenantID,
-		ev.ProjectID,
-		ev.UserID,
-		ev.RequestID,
-		ev.TraceID,
+		ev.ID, ev.Type,
+		ev.TenantID, ev.ProjectID, ev.UserID, ev.RequestID, ev.TraceID,
 		payloadJSON,
 		ev.Timestamp,
 	)
@@ -111,24 +103,40 @@ ON CONFLICT (event_id) DO NOTHING
 }
 
 // =============================================================================
-// PUBLISHER — worker loop
+// PUBLISHER
 // =============================================================================
 
-// Run arranca el loop del publisher. Bloquea hasta que el ctx se cancele.
 func (o *Outbox) Run(ctx context.Context) error {
-	logrus.Info("📤 OutboxPublisher iniciado",
-		"poll_interval", o.pollInterval,
-		"batch_size", o.batchSize)
+	logrus.WithFields(logrus.Fields{
+		"poll_interval":   o.pollInterval,
+		"batch_size":      o.batchSize,
+		"stuck_threshold": o.stuckThreshold,
+	}).Info("📤 OutboxPublisher iniciado")
 
-	ticker := time.NewTicker(o.pollInterval)
-	defer ticker.Stop()
+	if n, err := o.RecoverStuck(ctx); err != nil {
+		logrus.Errorf("outbox: RecoverStuck initial: %v", err)
+	} else if n > 0 {
+		logrus.Infof("📤 Outbox: %d eventos colgados recuperados al arrancar", n)
+	}
+
+	stuckTicker := time.NewTicker(10 * o.stuckThreshold)
+	defer stuckTicker.Stop()
+
+	pollTicker := time.NewTicker(o.pollInterval)
+	defer pollTicker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			logrus.Info("📤 OutboxPublisher detenido")
 			return ctx.Err()
-		case <-ticker.C:
+		case <-stuckTicker.C:
+			if n, err := o.RecoverStuck(ctx); err != nil {
+				logrus.Errorf("outbox: RecoverStuck periodic: %v", err)
+			} else if n > 0 {
+				logrus.Warnf("📤 Outbox: %d eventos colgados recuperados", n)
+			}
+		case <-pollTicker.C:
 			if err := o.drain(ctx); err != nil {
 				logrus.Errorf("outbox drain error: %v", err)
 			}
@@ -136,7 +144,25 @@ func (o *Outbox) Run(ctx context.Context) error {
 	}
 }
 
-// drain procesa lotes hasta que no queden pendientes elegibles.
+// RecoverStuck marca como 'failed' cualquier fila en 'publishing' cuyo
+// updated_at sea más antiguo que stuckThreshold. Devuelve cuántas recuperó.
+func (o *Outbox) RecoverStuck(ctx context.Context) (int, error) {
+	const q = `
+UPDATE outbox_events
+SET status = 'failed',
+    last_error = COALESCE(last_error, '') || '[recovered: stuck in publishing]',
+    next_attempt_at = NOW()
+WHERE status = 'publishing'
+  AND updated_at < NOW() - $1::interval
+`
+	threshold := fmt.Sprintf("%d seconds", int(o.stuckThreshold.Seconds()))
+	tag, err := o.pool.Exec(ctx, q, threshold)
+	if err != nil {
+		return 0, fmt.Errorf("outbox: recover stuck: %w", err)
+	}
+	return int(tag.RowsAffected()), nil
+}
+
 func (o *Outbox) drain(ctx context.Context) error {
 	for {
 		n, err := o.processBatch(ctx)
@@ -149,7 +175,6 @@ func (o *Outbox) drain(ctx context.Context) error {
 	}
 }
 
-// processBatch reclama y publica un lote. Devuelve cuántos procesó.
 func (o *Outbox) processBatch(ctx context.Context) (int, error) {
 	tx, err := o.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
@@ -165,7 +190,6 @@ func (o *Outbox) processBatch(ctx context.Context) (int, error) {
 		return 0, tx.Commit(ctx)
 	}
 
-	// Publicar fuera de la TX para no retener el lock durante el I/O del bus.
 	if err := tx.Commit(ctx); err != nil {
 		return 0, fmt.Errorf("outbox: commit claim: %w", err)
 	}
@@ -176,7 +200,6 @@ func (o *Outbox) processBatch(ctx context.Context) (int, error) {
 	return len(rows), nil
 }
 
-// outboxRow es la proyección que lee el publisher.
 type outboxRow struct {
 	eventID    string
 	eventType  string
@@ -190,8 +213,6 @@ type outboxRow struct {
 	occurredAt time.Time
 }
 
-// claimBatch reclama hasta batchSize filas con FOR UPDATE SKIP LOCKED.
-// Marca 'publishing' dentro de la TX, así el resto de workers no las tocan.
 func (o *Outbox) claimBatch(ctx context.Context, tx pgx.Tx) ([]outboxRow, error) {
 	const q = `
 WITH claimed AS (
@@ -204,8 +225,8 @@ LIMIT $1
 FOR UPDATE SKIP LOCKED
 )
 UPDATE outbox_events o
-SET status    = 'publishing',
-    attempts  = o.attempts + 1
+SET status   = 'publishing',
+    attempts = o.attempts + 1
 FROM claimed
 WHERE o.event_id = claimed.event_id
 RETURNING
@@ -234,7 +255,6 @@ o.payload, o.attempts, o.occurred_at
 	return out, rows.Err()
 }
 
-// publishOne publica un evento al bus y actualiza su estado.
 func (o *Outbox) publishOne(ctx context.Context, r outboxRow) {
 	ev := Event{
 		ID:        r.eventID,
@@ -260,7 +280,6 @@ func (o *Outbox) publishOne(ctx context.Context, r outboxRow) {
 		_ = json.Unmarshal(r.payload, &ev.Payload)
 	}
 
-	// Intento de publicación
 	if err := o.bus.Publish(ctx, ev); err != nil {
 		o.markFailed(ctx, r.eventID, r.attempts, err)
 		return
@@ -269,54 +288,54 @@ func (o *Outbox) publishOne(ctx context.Context, r outboxRow) {
 }
 
 func (o *Outbox) markPublished(ctx context.Context, id string) {
-	const q = `
-UPDATE outbox_events
-SET status = 'published', published_at = NOW()
-WHERE event_id = $1
-`
+	const q = `UPDATE outbox_events SET status='published', published_at=NOW() WHERE event_id=$1`
 	if _, err := o.pool.Exec(ctx, q, id); err != nil {
 		logrus.Errorf("outbox: markPublished %s: %v", id, err)
 	}
 }
 
 func (o *Outbox) markFailed(ctx context.Context, id string, attempts int, publishErr error) {
-	// Si hemos superado maxAttempts -> dead letter
 	status := "failed"
 	if attempts >= o.maxAttempts {
 		status = "dead"
 	}
-
 	backoff := o.computeBackoff(attempts)
 	nextAttempt := time.Now().Add(backoff)
 
 	const q = `
 UPDATE outbox_events
-SET status = $2,
-    last_error = $3,
-    next_attempt_at = $4
-WHERE event_id = $1
+SET status=$2, last_error=$3, next_attempt_at=$4
+WHERE event_id=$1
 `
 	if _, err := o.pool.Exec(ctx, q, id, status, publishErr.Error(), nextAttempt); err != nil {
 		logrus.Errorf("outbox: markFailed %s: %v", id, err)
 		return
 	}
-
 	if status == "dead" {
-		logrus.Errorf("☠️ outbox: evento %s marcado dead tras %d intentos: %v",
-			id, attempts, publishErr)
+		logrus.Errorf("☠️ outbox: evento %s marcado dead tras %d intentos: %v", id, attempts, publishErr)
 	}
 }
 
 // computeBackoff: exponencial con jitter, capped a maxBackoff.
 func (o *Outbox) computeBackoff(attempts int) time.Duration {
 	if attempts <= 0 {
-		return o.baseBackoff
+		attempts = 1
 	}
 	backoff := o.baseBackoff
 	for i := 1; i < attempts; i++ {
 		backoff *= 2
 		if backoff >= o.maxBackoff {
-			return o.maxBackoff
+			backoff = o.maxBackoff
+			break
+		}
+	}
+
+	if o.jitterFraction > 0 {
+		delta := float64(backoff) * o.jitterFraction
+		offset := (rand.Float64()*2 - 1) * delta
+		backoff = time.Duration(float64(backoff) + offset)
+		if backoff < 0 {
+			backoff = 0
 		}
 	}
 	return backoff
