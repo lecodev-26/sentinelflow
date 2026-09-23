@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/lecodev-26/sentinelflow/internal/idgen"
 	observabilityv3 "github.com/lecodev-26/sentinelflow/internal/observability/v3"
 )
 
@@ -30,8 +31,7 @@ func (m *TracingMiddleware) Handler(next http.Handler) http.Handler {
 			return
 		}
 
-		// Generar trace ID
-		traceID := generateTraceID()
+		traceID := idgen.RandomHex(8)
 		requestID := r.Header.Get("X-Request-Id")
 		if requestID == "" {
 			requestID = r.Header.Get("Idempotency-Key")
@@ -40,19 +40,15 @@ func (m *TracingMiddleware) Handler(next http.Handler) http.Handler {
 			requestID = traceID
 		}
 
-		// Iniciar trace
 		trace := m.store.Start(traceID, requestID)
 
-		// Inyectar en el contexto
 		ctx := context.WithValue(r.Context(), CtxTraceID, traceID)
 		ctx = context.WithValue(ctx, CtxTrace, trace)
 
-		// Ejecutar siguiente
 		start := time.Now()
 		next.ServeHTTP(w, r.WithContext(ctx))
 		latency := time.Since(start)
 
-		// Extraer metadata del contexto
 		if tenantID := getTenantFromCtx(ctx); tenantID != "" {
 			trace.TenantID = tenantID
 		}
@@ -63,7 +59,6 @@ func (m *TracingMiddleware) Handler(next http.Handler) http.Handler {
 			trace.APIKeyID = apiKeyID
 		}
 
-		// Determinar status
 		status := "ok"
 		if trace.StatusCode >= 400 {
 			status = "error"
@@ -74,15 +69,12 @@ func (m *TracingMiddleware) Handler(next http.Handler) http.Handler {
 			}
 		}
 
-		// Marcar span del middleware
 		m.store.AddSpan(traceID, observabilityv3.StartSpan("middleware.total").
 			WithAttr("latency_ms", latency.Milliseconds()).
 			End())
 
-		// Finalizar
 		m.store.End(traceID, 200, status, "")
 
-		// Header de trace ID
 		w.Header().Set("X-Trace-Id", traceID)
 	})
 }
@@ -94,12 +86,3 @@ const (
 	CtxTraceID traceContextKey = "trace_id"
 	CtxTrace   traceContextKey = "trace"
 )
-
-func generateTraceID() string {
-	const letters = "abcdefghijklmnopqrstuvwxyz0123456789"
-	b := make([]byte, 16)
-	for i := range b {
-		b[i] = letters[time.Now().UnixNano()%int64(len(letters))]
-	}
-	return string(b)
-}

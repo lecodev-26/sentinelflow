@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lecodev-26/sentinelflow/internal/idgen"
 	"github.com/lecodev-26/sentinelflow/internal/storage/postgres"
 )
 
@@ -40,7 +41,7 @@ func (s *Service) CreateOrganization(ctx context.Context, name, description stri
 	}
 
 	org := &postgres.Organization{
-		ID:            generateID("org"),
+		ID:            idgen.NewID("org"),
 		Name:          name,
 		Description:   description,
 		Residency:     "global",
@@ -81,13 +82,12 @@ func (s *Service) CreateProject(ctx context.Context, orgID, name, description st
 		return nil, errors.New("name is required")
 	}
 
-	// Verificar que la org existe
 	if _, err := s.orgs.GetByID(ctx, orgID); err != nil {
 		return nil, errors.New("organization not found")
 	}
 
 	project := &postgres.Project{
-		ID:          generateID("proj"),
+		ID:          idgen.NewID("proj"),
 		OrgID:       orgID,
 		Name:        name,
 		Description: description,
@@ -136,18 +136,16 @@ func (s *Service) CreateUser(ctx context.Context, orgID, email, name, role strin
 		return nil, fmt.Errorf("invalid role: %s", role)
 	}
 
-	// Verificar org
 	if _, err := s.orgs.GetByID(ctx, orgID); err != nil {
 		return nil, errors.New("organization not found")
 	}
 
-	// Verificar email único
 	if _, err := s.users.GetByEmail(ctx, email); err == nil {
 		return nil, errors.New("email already exists")
 	}
 
 	user := &postgres.User{
-		ID:     generateID("user"),
+		ID:     idgen.NewID("user"),
 		Email:  email,
 		Name:   name,
 		Role:   role,
@@ -185,7 +183,6 @@ func (s *Service) CreateAPIKey(ctx context.Context, userID, projectID, name stri
 		return "", nil, errors.New("user_id is required")
 	}
 
-	// Verificar usuario
 	user, err := s.users.GetByID(ctx, userID)
 	if err != nil {
 		return "", nil, errors.New("user not found")
@@ -194,7 +191,6 @@ func (s *Service) CreateAPIKey(ctx context.Context, userID, projectID, name stri
 		return "", nil, errors.New("user is inactive")
 	}
 
-	// Verificar project si aplica
 	if projectID != "" {
 		if _, err := s.projects.GetByID(ctx, projectID); err != nil {
 			return "", nil, errors.New("project not found")
@@ -244,12 +240,4 @@ func isValidRole(role string) bool {
 		return true
 	}
 	return false
-}
-
-func generateID(prefix string) string {
-	b := make([]byte, 8)
-	for i := range b {
-		b[i] = "abcdefghijklmnopqrstuvwxyz0123456789"[time.Now().UnixNano()%36]
-	}
-	return prefix + "_" + string(b)
 }

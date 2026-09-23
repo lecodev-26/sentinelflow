@@ -3,6 +3,8 @@ package rbac
 import (
 	"sync"
 	"time"
+
+	"github.com/lecodev-26/sentinelflow/internal/idgen"
 )
 
 // Organization representa una organización
@@ -50,7 +52,7 @@ func (m *OrganizationManager) CreateOrganization(name, description string) *Orga
 	defer m.mu.Unlock()
 
 	org := &Organization{
-		ID:          generateID("org"),
+		ID:          idgen.NewID("org"),
 		Name:        name,
 		Description: description,
 		CreatedAt:   time.Now(),
@@ -82,7 +84,7 @@ func (m *OrganizationManager) CreateProject(orgID, name, description string) (*P
 	}
 
 	project := &Project{
-		ID:          generateID("proj"),
+		ID:          idgen.NewID("proj"),
 		Name:        name,
 		Description: description,
 		OrgID:       orgID,
@@ -135,7 +137,6 @@ func (m *OrganizationManager) AddMember(orgID, userID string, role Role) error {
 		return ErrOrganizationNotFound
 	}
 
-	// Verificar si ya es miembro
 	for _, member := range org.Members {
 		if member == userID {
 			return ErrUserAlreadyMember
@@ -167,15 +168,16 @@ func (m *OrganizationManager) RemoveMember(orgID, userID string) error {
 	return ErrUserNotFound
 }
 
+// generateID genera un ID único con prefijo + crypto/rand
 func generateID(prefix string) string {
-	return prefix + "_" + time.Now().Format("20060102150405") + "_" + randomString(6)
+	return idgen.NewID(prefix)
 }
 
+// randomString genera n caracteres aleatorios con crypto/rand
 func randomString(n int) string {
-	const letters = "abcdefghijklmnopqrstuvwxyz0123456789"
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = letters[time.Now().UnixNano()%int64(len(letters))]
+	s := idgen.RandomHex(n)
+	if len(s) > n {
+		return s[:n]
 	}
-	return string(b)
+	return s
 }

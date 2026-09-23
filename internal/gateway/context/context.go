@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"github.com/lecodev-26/sentinelflow/internal/idgen"
 )
 
 // RequestContext contiene toda la información de una petición
@@ -71,8 +73,8 @@ const (
 // New crea un nuevo RequestContext
 func New(ctx context.Context) *RequestContext {
 	rc := &RequestContext{
-		RequestID: generateID(),
-		TraceID:   generateID(),
+		RequestID: idgen.NewID("req"),
+		TraceID:   idgen.NewID("trace"),
 		StartTime: time.Now(),
 		Metadata:  make(map[string]interface{}),
 		ctx:       ctx,
@@ -242,17 +244,4 @@ func (rc *RequestContext) ToMap() map[string]interface{} {
 		"error":         rc.Error,
 		"ip":            rc.IP,
 	}
-}
-
-func generateID() string {
-	return time.Now().Format("20060102150405") + "-" + randomString(8)
-}
-
-func randomString(n int) string {
-	const letters = "abcdefghijklmnopqrstuvwxyz0123456789"
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = letters[time.Now().UnixNano()%int64(len(letters))]
-	}
-	return string(b)
 }
