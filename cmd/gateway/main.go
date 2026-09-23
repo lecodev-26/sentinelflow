@@ -28,6 +28,7 @@ import (
 	routing "github.com/lecodev-26/sentinelflow/internal/routing/v3"
 	"github.com/lecodev-26/sentinelflow/internal/storage/postgres"
 	"github.com/lecodev-26/sentinelflow/internal/version"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -157,6 +158,8 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ready"}`))
 	}).Methods("GET")
+
+	r.Handle("/metrics", promhttp.Handler()).Methods("GET")
 
 	r.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

@@ -10,6 +10,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sirupsen/logrus"
+
+	"github.com/lecodev-26/sentinelflow/internal/metrics"
 )
 
 // Outbox implementa el patrón Transactional Outbox sobre PostgreSQL.
@@ -37,6 +39,7 @@ type OutboxConfig struct {
 	StuckThreshold time.Duration
 }
 
+// DefaultOutboxConfig devuelve valores razonables para producción.
 func DefaultOutboxConfig() OutboxConfig {
 	return OutboxConfig{
 		PollInterval:   500 * time.Millisecond,
@@ -49,6 +52,7 @@ func DefaultOutboxConfig() OutboxConfig {
 	}
 }
 
+// NewOutbox crea una instancia de Outbox.
 func NewOutbox(pool *pgxpool.Pool, bus EventBus, cfg OutboxConfig) *Outbox {
 	return &Outbox{
 		pool:           pool,
@@ -67,6 +71,7 @@ func NewOutbox(pool *pgxpool.Pool, bus EventBus, cfg OutboxConfig) *Outbox {
 // WRITER
 // =============================================================================
 
+// EnqueueTx inserta un evento en el outbox usando la TX del llamante.
 func (o *Outbox) EnqueueTx(ctx context.Context, tx pgx.Tx, ev Event) error {
 	payloadJSON, err := json.Marshal(ev.Payload)
 	if err != nil {
@@ -106,6 +111,7 @@ ON CONFLICT (event_id) DO NOTHING
 // PUBLISHER
 // =============================================================================
 
+// Run arranca el loop del publisher. Bloquea hasta que el ctx se cancele.
 func (o *Outbox) Run(ctx context.Context) error {
 	logrus.WithFields(logrus.Fields{
 		"poll_interval":   o.pollInterval,
@@ -140,6 +146,7 @@ func (o *Outbox) Run(ctx context.Context) error {
 			if err := o.drain(ctx); err != nil {
 				logrus.Errorf("outbox drain error: %v", err)
 			}
+			o.refreshPendingMetrics(ctx)
 		}
 	}
 }
@@ -160,7 +167,24 @@ WHERE status = 'publishing'
 	if err != nil {
 		return 0, fmt.Errorf("outbox: recover stuck: %w", err)
 	}
-	return int(tag.RowsAffected()), nil
+	n := int(tag.RowsAffected())
+	if n > 0 {
+		metrics.OutboxRecovered.Add(float64(n))
+	}
+	return n, nil
+}
+
+// refreshPendingMetrics actualiza el gauge OutboxPending consultando la DB.
+func (o *Outbox) refreshPendingMetrics(ctx context.Context) {
+	var n int64
+	err := o.pool.QueryRow(ctx,
+		"SELECT COUNT(*) FROM outbox_events WHERE status IN ('pending','failed')",
+	).Scan(&n)
+	if err != nil {
+		logrus.Debugf("outbox: refresh pending metric failed: %v", err)
+		return
+	}
+	metrics.OutboxPending.Set(float64(n))
 }
 
 func (o *Outbox) drain(ctx context.Context) error {
@@ -292,6 +316,7 @@ func (o *Outbox) markPublished(ctx context.Context, id string) {
 	if _, err := o.pool.Exec(ctx, q, id); err != nil {
 		logrus.Errorf("outbox: markPublished %s: %v", id, err)
 	}
+	metrics.OutboxEventsTotal.WithLabelValues("", "published").Inc()
 }
 
 func (o *Outbox) markFailed(ctx context.Context, id string, attempts int, publishErr error) {
@@ -311,6 +336,7 @@ WHERE event_id=$1
 		logrus.Errorf("outbox: markFailed %s: %v", id, err)
 		return
 	}
+	metrics.OutboxEventsTotal.WithLabelValues("", status).Inc()
 	if status == "dead" {
 		logrus.Errorf("☠️ outbox: evento %s marcado dead tras %d intentos: %v", id, attempts, publishErr)
 	}
