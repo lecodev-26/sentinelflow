@@ -13,6 +13,7 @@ import (
 	"github.com/lecodev-26/sentinelflow/internal/cache"
 	"github.com/lecodev-26/sentinelflow/internal/events"
 	"github.com/lecodev-26/sentinelflow/internal/logger"
+	"github.com/lecodev-26/sentinelflow/internal/security"
 	"github.com/lecodev-26/sentinelflow/internal/storage/postgres"
 	"github.com/lecodev-26/sentinelflow/internal/version"
 )
@@ -90,6 +91,12 @@ func main() {
 		log.Fatalf("❌ audit consumer register failed: %v", err)
 	}
 	log.Printf("📜 Audit consumer registrado")
+
+	securityConsumer := security.NewConsumer(pool)
+	if err := securityConsumer.Register(bus); err != nil {
+		log.Fatalf("❌ security consumer register failed: %v", err)
+	}
+	log.Printf("🛡️ Security consumer registrado")
 
 	// === Arrancar publisher en goroutine ===
 	pubCtx, pubCancel := context.WithCancel(ctx)
