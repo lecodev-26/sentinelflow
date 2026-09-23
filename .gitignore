@@ -60,3 +60,10 @@ sentinelflow.db
 *.db-wal
 backups/
 *.sql.gz
+
+# Binarios compilados
+/gateway
+/worker
+/controlplane
+/cli
+/sentinelflow
