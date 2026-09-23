@@ -291,6 +291,32 @@ func main() {
 		),
 	).Methods("GET")
 
+	// --- /v1/analytics/daily (auth + scope analytics:read + tenant isolation) ---
+	r.Handle("/v1/analytics/daily",
+		authMw.Handler(
+			middleware.RequireScope(rbac.ScopeReadAnalytics)(
+				http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+					tenantID := middleware.GetTenantID(req.Context())
+					days := 30
+					if d := req.URL.Query().Get("days"); d != "" {
+						fmt.Sscanf(d, "%d", &days)
+					}
+					rows, err := pgClient.Analytics().ListByTenant(req.Context(), tenantID, days)
+					if err != nil {
+						writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+						return
+					}
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(map[string]interface{}{
+						"tenant_id": tenantID,
+						"days":      days,
+						"daily":     rows,
+					})
+				}),
+			),
+		),
+	).Methods("GET")
+
 	// --- /v1/usage/stats (auth + scope usage:read + tenant isolation) ---
 	r.Handle("/v1/usage/stats",
 		authMw.Handler(
