@@ -26,6 +26,7 @@ import (
 	"github.com/lecodev-26/sentinelflow/internal/providers/v3/adapters"
 	"github.com/lecodev-26/sentinelflow/internal/rbac"
 	routing "github.com/lecodev-26/sentinelflow/internal/routing/v3"
+	securityv3 "github.com/lecodev-26/sentinelflow/internal/security/v3"
 	"github.com/lecodev-26/sentinelflow/internal/storage/postgres"
 	"github.com/lecodev-26/sentinelflow/internal/version"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -131,7 +132,8 @@ func main() {
 	authMw := middleware.NewAuth(identitySvc, authEnabled)
 	idempotencyMw := middleware.NewIdempotencyDistributedMiddleware(pgClient.Idempotency(), true, 24*time.Hour)
 	tracingMw := middleware.NewTracingMiddleware(traceStore, true)
-	policyMw := middleware.NewPolicyMiddleware(policyEvaluator, true)
+	secEmitter := securityv3.NewEmitter(outbox, pgClient.Pool())
+	policyMw := middleware.NewPolicyMiddleware(policyEvaluator, true, secEmitter)
 	accountingMw := middleware.NewAccountingMiddleware(accountingSvc, true)
 	normalizerSvc := normalizer.New()
 

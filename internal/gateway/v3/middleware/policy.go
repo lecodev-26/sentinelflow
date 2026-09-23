@@ -24,14 +24,16 @@ const (
 type PolicyMiddleware struct {
 	evaluator *policyv3.Evaluator
 	security  *securityv3.Pipeline
+	emitter   *securityv3.Emitter
 	enabled   bool
 }
 
 // NewPolicyMiddleware crea un nuevo middleware
-func NewPolicyMiddleware(evaluator *policyv3.Evaluator, enabled bool) *PolicyMiddleware {
+func NewPolicyMiddleware(evaluator *policyv3.Evaluator, enabled bool, emitter *securityv3.Emitter) *PolicyMiddleware {
 	return &PolicyMiddleware{
 		evaluator: evaluator,
 		security:  securityv3.NewPipeline(),
+		emitter:   emitter,
 		enabled:   enabled,
 	}
 }
@@ -86,6 +88,7 @@ func (m *PolicyMiddleware) Handler(next http.Handler) http.Handler {
 		// === 2. Security scan del input ===
 		messages, _ := reqBody["messages"].([]interface{})
 		securityDecision := securityv3.NewDecision()
+		_ = securityDecision
 
 		for i, msgRaw := range messages {
 			msg, ok := msgRaw.(map[string]interface{})
@@ -138,6 +141,21 @@ func (m *PolicyMiddleware) Handler(next http.Handler) http.Handler {
 			if securityDecision.ShouldRedact() {
 				messages[i].(map[string]interface{})["content"] = securityDecision.ProcessedText
 			}
+		}
+
+		// Emitir findings al bus
+		if m.emitter != nil && len(securityDecision.Findings) > 0 {
+			findings := make([]securityv3.EmitFinding, 0, len(securityDecision.Findings))
+			for _, f := range securityDecision.Findings {
+				findings = append(findings, securityv3.EmitFinding{
+					Kind:     string(f.Category),
+					Severity: string(f.Risk),
+					Rule:     f.Rule,
+					Snippet:  f.Match,
+					Action:   string(securityDecision.Action),
+				})
+			}
+			_ = m.emitter.Emit(r.Context(), tenantID, "", "", r.Header.Get("X-Request-Id"), "", findings)
 		}
 
 		// Si bloqueado, devolver error
