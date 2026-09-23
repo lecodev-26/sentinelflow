@@ -2,6 +2,8 @@ package postgres
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5"
 	"time"
 )
 
@@ -146,4 +148,27 @@ func (r *UsageRepo) CountByTenant(ctx context.Context, tenantID string, since ti
 SELECT COUNT(*) FROM usage_records
 WHERE tenant_id = $1 AND timestamp >= $2`, tenantID, since).Scan(&count)
 	return count, err
+}
+
+// CreateTx inserta un usage record usando una transacción externa.
+// Se usa desde accounting.Service.Record para hacer atómico el uso + el outbox.
+func (r *UsageRepo) CreateTx(ctx context.Context, tx pgx.Tx, rec *UsageRecord) error {
+	if rec.Timestamp.IsZero() {
+		rec.Timestamp = time.Now()
+	}
+	rec.TotalTokens = rec.InputTokens + rec.OutputTokens
+	rec.CostUSD = rec.InputCostUSD + rec.OutputCostUSD
+
+	_, err := tx.Exec(ctx, `
+INSERT INTO usage_records (
+id, request_id, tenant_id, project_id, user_id, api_key_id,
+provider, model, input_tokens, output_tokens, total_tokens,
+input_cost_usd, output_cost_usd, cost_usd, latency_ms, ttft_ms,
+status, cache_hit, fallback, timestamp
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
+		rec.ID, rec.RequestID, rec.TenantID, rec.ProjectID, rec.UserID, rec.APIKeyID,
+		rec.Provider, rec.Model, rec.InputTokens, rec.OutputTokens, rec.TotalTokens,
+		rec.InputCostUSD, rec.OutputCostUSD, rec.CostUSD, rec.LatencyMs, rec.TTFTMs,
+		rec.Status, rec.CacheHit, rec.Fallback, rec.Timestamp)
+	return err
 }

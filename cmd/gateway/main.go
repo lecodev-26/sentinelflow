@@ -14,6 +14,7 @@ import (
 
 	"github.com/gorilla/mux"
 	accountingv3 "github.com/lecodev-26/sentinelflow/internal/accounting/v3"
+	"github.com/lecodev-26/sentinelflow/internal/events"
 	"github.com/lecodev-26/sentinelflow/internal/gateway/v3/executor"
 	"github.com/lecodev-26/sentinelflow/internal/gateway/v3/middleware"
 	"github.com/lecodev-26/sentinelflow/internal/gateway/v3/normalizer"
@@ -100,7 +101,8 @@ func main() {
 	log.Printf("📋 Policy Engine: %d políticas", len(policyEvaluator.List()))
 
 	// === Accounting ===
-	accountingSvc := accountingv3.NewService(pgClient.Usage(), pgClient.Budgets(), modelRegistry)
+	outbox := events.NewOutbox(pgClient.Pool(), nil, events.DefaultOutboxConfig())
+	accountingSvc := accountingv3.NewService(pgClient, pgClient.Usage(), pgClient.Budgets(), modelRegistry, outbox)
 	accountingSvc.OnBudgetAlert(func(alert accountingv3.BudgetAlert) {
 		logger.Warnf("🚨 BUDGET ALERT: tenant=%s threshold=%d%% spent=$%.2f/%.2f",
 			alert.TenantID, alert.Threshold, alert.Spent, alert.Limit)

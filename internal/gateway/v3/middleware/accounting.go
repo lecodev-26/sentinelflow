@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -95,7 +96,9 @@ func (m *AccountingMiddleware) Handler(next http.Handler) http.Handler {
 		}
 
 		go func() {
-			_ = m.service.Record(r.Context(), rec)
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			_ = m.service.Record(ctx, rec)
 		}()
 	})
 }

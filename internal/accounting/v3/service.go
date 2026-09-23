@@ -4,6 +4,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
+	"github.com/lecodev-26/sentinelflow/internal/events"
 	"github.com/lecodev-26/sentinelflow/internal/logger"
 	routing "github.com/lecodev-26/sentinelflow/internal/routing/v3"
 	"github.com/lecodev-26/sentinelflow/internal/storage/postgres"
@@ -11,9 +14,11 @@ import (
 
 // Service es el servicio de accounting
 type Service struct {
+	client        *postgres.Client
 	usageRepo     *postgres.UsageRepo
 	budgetRepo    *postgres.BudgetRepo
 	modelReg      *routing.ModelRegistry
+	outbox        *events.Outbox
 	onBudgetAlert func(alert BudgetAlert)
 }
 
@@ -27,12 +32,15 @@ type BudgetAlert struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-// NewService crea un nuevo servicio
-func NewService(usageRepo *postgres.UsageRepo, budgetRepo *postgres.BudgetRepo, modelReg *routing.ModelRegistry) *Service {
+// NewService crea un nuevo servicio.
+// outbox puede ser nil — en ese caso no se persisten eventos (modo legacy).
+func NewService(client *postgres.Client, usageRepo *postgres.UsageRepo, budgetRepo *postgres.BudgetRepo, modelReg *routing.ModelRegistry, outbox *events.Outbox) *Service {
 	return &Service{
+		client:     client,
 		usageRepo:  usageRepo,
 		budgetRepo: budgetRepo,
 		modelReg:   modelReg,
+		outbox:     outbox,
 	}
 }
 
@@ -41,7 +49,16 @@ func (s *Service) OnBudgetAlert(cb func(BudgetAlert)) {
 	s.onBudgetAlert = cb
 }
 
-// Record registra un uso y calcula coste
+// Record calcula coste, persiste el uso y publica el evento de uso en el outbox.
+//
+// Garantía atómica:
+//   - INSERT usage_records
+//   - INSERT outbox_events
+//
+// ocurren en la MISMA transacción. Si algo falla, rollback: no hay uso huérfano
+// ni evento sin uso.
+//
+// El budget se actualiza fuera de TX porque es recalculable desde usage_records.
 func (s *Service) Record(ctx context.Context, rec *postgres.UsageRecord) error {
 	// Calcular coste con pricing real del Model Registry
 	if s.modelReg != nil && rec.Provider != "" && rec.Model != "" {
@@ -52,16 +69,24 @@ func (s *Service) Record(ctx context.Context, rec *postgres.UsageRecord) error {
 		}
 	}
 
-	// Persistir usage record
-	if err := s.usageRepo.Create(ctx, rec); err != nil {
-		logger.Errorf("❌ Error guardando usage record: %v", err)
-		return err
+	// Persistir uso + evento en la misma TX (si hay outbox)
+	if s.outbox != nil && s.client != nil {
+		if err := s.recordWithOutbox(ctx, rec); err != nil {
+			logger.Errorf("❌ Error guardando usage + event: %v", err)
+			return err
+		}
+	} else {
+		// Modo legacy: sin outbox
+		if err := s.usageRepo.Create(ctx, rec); err != nil {
+			logger.Errorf("❌ Error guardando usage record: %v", err)
+			return err
+		}
 	}
 
 	logger.Infof("💰 Usage: tenant=%s provider=%s model=%s tokens=%d cost=$%.6f",
 		rec.TenantID, rec.Provider, rec.Model, rec.TotalTokens, rec.CostUSD)
 
-	// Actualizar budget
+	// Actualizar budget (fuera de TX — eventual consistency, recalculable)
 	if rec.CostUSD > 0 {
 		budget, err := s.budgetRepo.RecordSpend(ctx, rec.TenantID, rec.CostUSD)
 		if err != nil {
@@ -74,38 +99,58 @@ func (s *Service) Record(ctx context.Context, rec *postgres.UsageRecord) error {
 	return nil
 }
 
+// recordWithOutbox hace INSERT usage + INSERT outbox en una sola TX.
+func (s *Service) recordWithOutbox(ctx context.Context, rec *postgres.UsageRecord) error {
+	return s.client.WithTx(ctx, func(tx pgx.Tx) error {
+		if err := s.usageRepo.CreateTx(ctx, tx, rec); err != nil {
+			return err
+		}
+		ev := events.NewEvent(events.EventUsageRecorded).
+			WithTenant(rec.TenantID).
+			WithProject(rec.ProjectID).
+			WithUser(rec.UserID).
+			WithRequest(rec.RequestID).
+			WithPayload("usage_id", rec.ID).
+			WithPayload("provider", rec.Provider).
+			WithPayload("model", rec.Model).
+			WithPayload("input_tokens", rec.InputTokens).
+			WithPayload("output_tokens", rec.OutputTokens).
+			WithPayload("cost_usd", rec.CostUSD).
+			WithPayload("latency_ms", rec.LatencyMs).
+			WithPayload("status", rec.Status)
+		return s.outbox.EnqueueTx(ctx, tx, ev)
+	})
+}
+
 // checkAlerts verifica si hay que disparar alertas
 func (s *Service) checkAlerts(ctx context.Context, b *postgres.Budget) {
-	if b.MonthlyLimit <= 0 {
+	if b == nil || b.MonthlyLimit <= 0 {
 		return
 	}
 
 	pct := b.PercentMonth()
 	var threshold int
 
-	if pct >= 100 && !b.Alert100Sent {
+	switch {
+	case pct >= 100 && !b.Alert100Sent:
 		threshold = 100
 		b.Alert100Sent = true
-	} else if pct >= 90 && !b.Alert90Sent {
+	case pct >= 90 && !b.Alert90Sent:
 		threshold = 90
 		b.Alert90Sent = true
-	} else if pct >= 80 && !b.Alert80Sent {
+	case pct >= 80 && !b.Alert80Sent:
 		threshold = 80
 		b.Alert80Sent = true
-	}
-
-	if threshold == 0 {
+	default:
 		return
 	}
 
-	// Marcar como enviada
-	_ = s.budgetRepo.MarkAlert(ctx, b.TenantID, threshold)
-
-	logger.Warnf("🚨 BUDGET ALERT: tenant=%s threshold=%d%% spent=$%.2f/%.2f",
-		b.TenantID, threshold, b.SpentMonth, b.MonthlyLimit)
+	if err := s.budgetRepo.MarkAlert(ctx, b.TenantID, threshold); err != nil {
+		logger.Errorf("❌ Error marcando alerta: %v", err)
+	}
 
 	if s.onBudgetAlert != nil {
-		go s.onBudgetAlert(BudgetAlert{
+		s.onBudgetAlert(BudgetAlert{
 			TenantID:  b.TenantID,
 			Threshold: threshold,
 			Spent:     b.SpentMonth,
@@ -116,25 +161,46 @@ func (s *Service) checkAlerts(ctx context.Context, b *postgres.Budget) {
 	}
 }
 
-// Stats agrega estadísticas por tenant
-func (s *Service) Stats(ctx context.Context, tenantID string, since time.Duration) (map[string]interface{}, error) {
-	sinceTime := time.Now().Add(-since)
+// Stats devuelve estadísticas agregadas de uso para un tenant en una ventana.
+type Stats struct {
+	TenantID   string             `json:"tenant_id"`
+	Since      time.Time          `json:"since"`
+	TotalCost  float64            `json:"total_cost_usd"`
+	Count      int64              `json:"requests"`
+	ByProvider map[string]float64 `json:"by_provider"`
+	ByModel    map[string]float64 `json:"by_model"`
+	ByDay      map[string]float64 `json:"by_day"`
+}
 
-	totalCost, _ := s.usageRepo.SumCostByTenant(ctx, tenantID, sinceTime)
-	byProvider, _ := s.usageRepo.SumCostByProvider(ctx, tenantID, sinceTime)
-	byModel, _ := s.usageRepo.SumCostByModel(ctx, tenantID, sinceTime)
-	byDay, _ := s.usageRepo.SumCostByDay(ctx, tenantID, sinceTime)
-	count, _ := s.usageRepo.CountByTenant(ctx, tenantID, sinceTime)
-
-	budget, _ := s.budgetRepo.GetByTenant(ctx, tenantID)
-
-	return map[string]interface{}{
-		"tenant_id":   tenantID,
-		"total_cost":  totalCost,
-		"by_provider": byProvider,
-		"by_model":    byModel,
-		"by_day":      byDay,
-		"requests":    count,
-		"budget":      budget,
+func (s *Service) Stats(ctx context.Context, tenantID string, since time.Duration) (*Stats, error) {
+	from := time.Now().Add(-since)
+	cost, err := s.usageRepo.SumCostByTenant(ctx, tenantID, from)
+	if err != nil {
+		return nil, err
+	}
+	count, err := s.usageRepo.CountByTenant(ctx, tenantID, from)
+	if err != nil {
+		return nil, err
+	}
+	byProvider, err := s.usageRepo.SumCostByProvider(ctx, tenantID, from)
+	if err != nil {
+		return nil, err
+	}
+	byModel, err := s.usageRepo.SumCostByModel(ctx, tenantID, from)
+	if err != nil {
+		return nil, err
+	}
+	byDay, err := s.usageRepo.SumCostByDay(ctx, tenantID, from)
+	if err != nil {
+		return nil, err
+	}
+	return &Stats{
+		TenantID:   tenantID,
+		Since:      from,
+		TotalCost:  cost,
+		Count:      count,
+		ByProvider: byProvider,
+		ByModel:    byModel,
+		ByDay:      byDay,
 	}, nil
 }

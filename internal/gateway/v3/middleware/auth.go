@@ -50,6 +50,7 @@ func (a *Auth) Handler(next http.Handler) http.Handler {
 			ctx = context.WithValue(ctx, CtxOrgID, "default")
 			ctx = context.WithValue(ctx, CtxUserID, "anonymous")
 			ctx = context.WithValue(ctx, CtxResidency, "global")
+			ctx = context.WithValue(ctx, CtxScopes, []string{"*"})
 			next.ServeHTTP(w, r.WithContext(ctx))
 			return
 		}
@@ -108,7 +109,7 @@ func HasScope(ctx context.Context, scope string) bool {
 		return false
 	}
 	for _, s := range scopes {
-		if s == scope {
+		if s == scope || s == "*" {
 			return true
 		}
 	}
