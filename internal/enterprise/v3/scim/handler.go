@@ -3,6 +3,7 @@ package scim
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/gorilla/mux"
 	"github.com/lecodev-26/sentinelflow/internal/identity"
@@ -10,6 +11,7 @@ import (
 	"github.com/lecodev-26/sentinelflow/internal/storage/postgres"
 )
 
+// User representa un usuario SCIM
 type User struct {
 	Schemas    []string `json:"schemas"`
 	ID         string   `json:"id"`
@@ -33,14 +35,17 @@ type User struct {
 	} `json:"meta,omitempty"`
 }
 
+// Handler maneja SCIM 2.0 endpoints
 type Handler struct {
 	identitySvc *identity.Service
 }
 
+// NewHandler crea un nuevo handler SCIM
 func NewHandler(svc *identity.Service) *Handler {
 	return &Handler{identitySvc: svc}
 }
 
+// Register registra las rutas
 func (h *Handler) Register(r *mux.Router) {
 	scim := r.PathPrefix("/scim/v2").Subrouter()
 	scim.HandleFunc("/Users", h.handleUsers).Methods("GET", "POST")
@@ -163,22 +168,58 @@ func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request, id string) 
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// updateUser aplica cambios reales en la base de datos
 func (h *Handler) updateUser(w http.ResponseWriter, r *http.Request, id string) {
-	user, err := h.identitySvc.GetUser(r.Context(), id)
+	// 1. Verificar que el usuario existe
+	_, err := h.identitySvc.GetUser(r.Context(), id)
 	if err != nil {
 		h.writeError(w, http.StatusNotFound, "user not found")
 		return
 	}
 
+	// 2. Parsear el SCIM User recibido
 	var scimUser User
 	if err := json.NewDecoder(r.Body).Decode(&scimUser); err != nil {
 		h.writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
 
-	logger.Infof("👥 SCIM user updated: %s", id)
+	// 3. Convertir a UserUpdates (solo campos definidos)
+	updates := identity.UserUpdates{}
 
-	result := scimUserFromIdentity(user)
+	if scimUser.Name.Formatted != "" {
+		name := scimUser.Name.Formatted
+		updates.Name = &name
+	} else if scimUser.Name.GivenName != "" || scimUser.Name.FamilyName != "" {
+		name := strings.TrimSpace(scimUser.Name.GivenName + " " + scimUser.Name.FamilyName)
+		updates.Name = &name
+	}
+
+	if len(scimUser.Emails) > 0 && scimUser.Emails[0].Value != "" {
+		email := scimUser.Emails[0].Value
+		updates.Email = &email
+	}
+
+	// Aplicar active solo si el body traía el campo.
+	// Como json.Decoder no distingue "no enviado" de "false",
+	// siempre lo aplicamos (comportamiento SCIM estándar para PUT).
+	updates.Active = &scimUser.Active
+
+	// 4. Aplicar update en la DB
+	updated, err := h.identitySvc.UpdateUser(r.Context(), id, updates)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	logger.Infof("👥 SCIM user updated: %s (%s)", updated.Email, updated.ID)
+
+	// 5. Devolver el usuario actualizado en formato SCIM
+	result := scimUserFromIdentity(updated)
+	result.Schemas = []string{"urn:ietf:params:scim:schemas:core:2.0:User"}
+	result.Meta.ResourceType = "User"
+	result.Meta.Location = "/scim/v2/Users/" + updated.ID
+
 	json.NewEncoder(w).Encode(result)
 }
 
