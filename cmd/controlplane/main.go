@@ -11,8 +11,10 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	cpv3 "github.com/lecodev-26/sentinelflow/internal/controlplane/v3"
 	oidcv3 "github.com/lecodev-26/sentinelflow/internal/enterprise/v3/oidc"
 	scimv3 "github.com/lecodev-26/sentinelflow/internal/enterprise/v3/scim"
+	"github.com/lecodev-26/sentinelflow/internal/gateway/v3/middleware"
 	"github.com/lecodev-26/sentinelflow/internal/identity"
 	"github.com/lecodev-26/sentinelflow/internal/logger"
 	"github.com/lecodev-26/sentinelflow/internal/storage/postgres"
@@ -57,11 +59,19 @@ func main() {
 	identitySvc := identity.NewService(pgClient)
 	log.Printf("✅ Identity service iniciado")
 
-	// OIDC V3.7
+	// === Auth middleware ===
+	authEnabled := os.Getenv("SENTINELFLOW_ENV") == "production"
+	authMw := middleware.NewAuth(identitySvc, authEnabled)
+	if authEnabled {
+		log.Printf("🔒 Control Plane auth: ENABLED (production)")
+	} else {
+		log.Printf("🔓 Control Plane auth: DISABLED (development)")
+	}
+
+	// === OIDC ===
 	oidcMgr := oidcv3.NewManager()
 	oidcFlow := oidcv3.NewFlow(oidcMgr)
 
-	// Registrar providers desde env vars (opcional)
 	if cid := os.Getenv("GOOGLE_CLIENT_ID"); cid != "" {
 		_ = oidcMgr.RegisterProvider(&oidcv3.Config{
 			Provider:     oidcv3.ProviderGoogle,
@@ -81,14 +91,22 @@ func main() {
 		log.Printf("✅ OIDC provider registrado: github")
 	}
 
-	// SCIM V3.7
+	// === SCIM handler (con su propio bearer token) ===
 	scimHandler := scimv3.NewHandler(identitySvc)
-	log.Printf("✅ SCIM 2.0 handler iniciado")
+	scimAuth := middleware.NewSCIMAuthMiddleware()
+	if scimAuth.Enabled() {
+		log.Printf("🔒 SCIM auth: ENABLED (SCIM_TOKEN set)")
+	} else {
+		log.Printf("⚠️  SCIM auth: DISABLED (SCIM_TOKEN not set)")
+	}
 
+	// === Router ===
 	r := mux.NewRouter()
 	r.Use(corsMiddleware)
 
-	// Health
+	// ============================================================
+	// PUBLIC ENDPOINTS (no auth)
+	// ============================================================
 	r.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
 		if err := pgClient.HealthCheck(req.Context()); err != nil {
 			w.WriteHeader(http.StatusServiceUnavailable)
@@ -105,7 +123,8 @@ func main() {
 		w.Write([]byte(`{"version":"` + info.Version + `","commit":"` + info.Commit + `"}`))
 	}).Methods("GET")
 
-	// === OIDC Endpoints V3.7 ===
+	// OIDC: providers list + login + callback deben ser públicos
+	// (login redirige al IdP, callback recibe el code del IdP)
 	r.HandleFunc("/auth/oidc/providers", func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -129,8 +148,7 @@ func main() {
 	}).Methods("GET")
 
 	r.HandleFunc("/auth/oidc/{provider}/callback", func(w http.ResponseWriter, req *http.Request) {
-		// En producción: intercambiar code por token
-		// Por ahora placeholder
+		// TODO: token exchange completo (E.6)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"status":  "received",
@@ -140,13 +158,22 @@ func main() {
 		})
 	}).Methods("GET")
 
-	// === SCIM Endpoints V3.7 ===
-	scimHandler.Register(r)
+	// ============================================================
+	// SCIM (bearer token propio)
+	// ============================================================
+	scimRouter := r.PathPrefix("/scim/v2").Subrouter()
+	if scimAuth.Enabled() {
+		scimRouter.Use(scimAuth.Handler)
+	}
+	scimHandler.Register(scimRouter)
 
-	// === Identity Endpoints (V3.1) ===
-	// (los mismos que ya teníamos, resumidos)
+	// ============================================================
+	// CONTROL PLANE V3 (auth + scopes)
+	// ============================================================
+	handlers := cpv3.NewWithAuth(identitySvc, authMw)
+	handlers.Register(r)
 
-	// Servidor
+	// === Server ===
 	srv := &http.Server{
 		Addr:         ":8081",
 		Handler:      r,
@@ -160,13 +187,11 @@ func main() {
 
 	go func() {
 		log.Printf("✅ Control Plane en http://localhost:8081")
-		log.Printf("   Endpoints Enterprise V3.7:")
-		log.Printf("   GET  /auth/oidc/providers")
-		log.Printf("   GET  /auth/oidc/{provider}/login")
-		log.Printf("   GET  /auth/oidc/{provider}/callback")
-		log.Printf("   GET  /scim/v2/Users")
-		log.Printf("   POST /scim/v2/Users")
-		log.Printf("   GET  /scim/v2/ServiceProviderConfig")
+		log.Printf("   Auth: %v (production requires API key with admin:* scope)", authEnabled)
+		log.Printf("   Public: /health, /version, /auth/oidc/*")
+		log.Printf("   Protected (admin:read): GET /v1/organizations, /v1/users, etc.")
+		log.Printf("   Protected (admin:write): POST/DELETE /v1/organizations, /v1/users, etc.")
+		log.Printf("   SCIM: /scim/v2/* (Bearer token if SCIM_TOKEN set)")
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("❌ Control Plane error: %v", err)
 		}

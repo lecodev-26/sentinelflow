@@ -6,45 +6,65 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/lecodev-26/sentinelflow/internal/gateway/v3/middleware"
 	"github.com/lecodev-26/sentinelflow/internal/identity"
+	"github.com/lecodev-26/sentinelflow/internal/rbac"
 )
 
 // Handlers agrupa todos los handlers del Control Plane V3
 type Handlers struct {
-	svc *identity.Service
+	svc    *identity.Service
+	authMw *middleware.Auth
 }
 
-// New crea nuevos handlers
+// New crea nuevos handlers (sin auth, para tests)
 func New(svc *identity.Service) *Handlers {
 	return &Handlers{svc: svc}
 }
 
-// Register registra todas las rutas
+// NewWithAuth crea handlers con auth middleware (para producción)
+func NewWithAuth(svc *identity.Service, authMw *middleware.Auth) *Handlers {
+	return &Handlers{
+		svc:    svc,
+		authMw: authMw,
+	}
+}
+
+// Register registra todas las rutas con auth + scopes
 func (h *Handlers) Register(r *mux.Router) {
 	api := r.PathPrefix("/v1").Subrouter()
 
-	// Organizations
-	api.HandleFunc("/organizations", h.ListOrganizations).Methods("GET")
-	api.HandleFunc("/organizations", h.CreateOrganization).Methods("POST")
-	api.HandleFunc("/organizations/{id}", h.GetOrganization).Methods("GET")
-	api.HandleFunc("/organizations/{id}", h.DeleteOrganization).Methods("DELETE")
+	// Si hay authMw, aplicarlo a todo /v1/*
+	if h.authMw != nil {
+		api.Use(h.authMw.Handler)
+	}
 
-	// Projects
-	api.HandleFunc("/organizations/{id}/projects", h.ListProjects).Methods("GET")
-	api.HandleFunc("/organizations/{id}/projects", h.CreateProject).Methods("POST")
-	api.HandleFunc("/projects/{id}", h.GetProject).Methods("GET")
-	api.HandleFunc("/projects/{id}", h.DeleteProject).Methods("DELETE")
+	// === READ endpoints (admin:read) ===
+	read := api.PathPrefix("").Subrouter()
+	if h.authMw != nil {
+		read.Use(middleware.RequireScope(rbac.ScopeReadAdmin))
+	}
+	read.HandleFunc("/organizations", h.ListOrganizations).Methods("GET")
+	read.HandleFunc("/organizations/{id}", h.GetOrganization).Methods("GET")
+	read.HandleFunc("/organizations/{id}/projects", h.ListProjects).Methods("GET")
+	read.HandleFunc("/projects/{id}", h.GetProject).Methods("GET")
+	read.HandleFunc("/organizations/{id}/users", h.ListUsers).Methods("GET")
+	read.HandleFunc("/users/{id}", h.GetUser).Methods("GET")
+	read.HandleFunc("/users/{id}/api-keys", h.ListAPIKeys).Methods("GET")
 
-	// Users
-	api.HandleFunc("/organizations/{id}/users", h.ListUsers).Methods("GET")
-	api.HandleFunc("/users", h.CreateUser).Methods("POST")
-	api.HandleFunc("/users/{id}", h.GetUser).Methods("GET")
-	api.HandleFunc("/users/{id}", h.DeleteUser).Methods("DELETE")
-
-	// API Keys
-	api.HandleFunc("/users/{id}/api-keys", h.ListAPIKeys).Methods("GET")
-	api.HandleFunc("/users/{id}/api-keys", h.CreateAPIKey).Methods("POST")
-	api.HandleFunc("/api-keys/{id}", h.RevokeAPIKey).Methods("DELETE")
+	// === WRITE endpoints (admin:write) ===
+	write := api.PathPrefix("").Subrouter()
+	if h.authMw != nil {
+		write.Use(middleware.RequireScope(rbac.ScopeWriteAdmin))
+	}
+	write.HandleFunc("/organizations", h.CreateOrganization).Methods("POST")
+	write.HandleFunc("/organizations/{id}", h.DeleteOrganization).Methods("DELETE")
+	write.HandleFunc("/organizations/{id}/projects", h.CreateProject).Methods("POST")
+	write.HandleFunc("/projects/{id}", h.DeleteProject).Methods("DELETE")
+	write.HandleFunc("/users", h.CreateUser).Methods("POST")
+	write.HandleFunc("/users/{id}", h.DeleteUser).Methods("DELETE")
+	write.HandleFunc("/users/{id}/api-keys", h.CreateAPIKey).Methods("POST")
+	write.HandleFunc("/api-keys/{id}", h.RevokeAPIKey).Methods("DELETE")
 }
 
 // === ORGANIZATIONS ===
@@ -248,7 +268,6 @@ func (h *Handlers) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Devolver la key en claro UNA SOLA VEZ
 	writeJSON(w, http.StatusCreated, map[string]interface{}{
 		"api_key": key,
 		"key":     rawKey,
