@@ -116,11 +116,15 @@ func main() {
 
 	// === Identity ===
 	identitySvc := identity.NewService(pgClient)
-	authEnabled := os.Getenv("SENTINELFLOW_ENV") == "production"
+	env := os.Getenv("SENTINELFLOW_ENV")
+	if env == "" {
+		log.Printf("⚠️  SENTINELFLOW_ENV not set — auth ENABLED by default (fail-safe). Set SENTINELFLOW_ENV=development to disable.")
+	}
+	authEnabled := env != "development"
 	if authEnabled {
-		log.Printf("🔒 Auth: ENABLED (production)")
+		log.Printf("🔒 Auth: ENABLED (env=%s)", env)
 	} else {
-		log.Printf("🔓 Auth: DISABLED (development)")
+		log.Printf("🔓 Auth: DISABLED (env=%s, dev only)", env)
 	}
 
 	// === Middlewares ===
