@@ -1,13 +1,52 @@
-.PHONY: build run test clean deps vet fmt lint
+.PHONY: help build build-gateway build-controlplane build-worker build-cli
+.PHONY: run run-gateway run-controlplane run-worker
+.PHONY: test test-cover test-race vet fmt fmt-check lint clean deps
+.PHONY: docker-build docker-build-gateway docker-build-controlplane docker-build-worker
+.PHONY: backup dr-test all ci
 
-BINARY=bin/proxy
-MAIN=cmd/proxy/main.go
+BIN_DIR := bin
+GATEWAY := $(BIN_DIR)/gateway
+CONTROLPLANE := $(BIN_DIR)/controlplane
+WORKER := $(BIN_DIR)/worker
+CLI := $(BIN_DIR)/sfctl
 
-build:
-	go build -o $(BINARY) $(MAIN)
+help:
+	@echo "SentinelFlow V3 - Available targets:"
+	@echo ""
+	@echo "  Build:  make build | build-gateway | build-controlplane | build-worker | build-cli"
+	@echo "  Run:    make run-gateway | run-controlplane | run-worker"
+	@echo "  Test:   make test | test-cover | test-race"
+	@echo "  QA:     make vet | fmt | fmt-check | lint"
+	@echo "  Ops:    make backup | dr-test"
+	@echo "  CI:     make ci"
 
-run:
-	go run $(MAIN)
+build: build-gateway build-controlplane build-worker build-cli
+	@echo "All V3 binaries built in $(BIN_DIR)/"
+
+build-gateway:
+	@mkdir -p $(BIN_DIR)
+	go build -ldflags="-s -w" -o $(GATEWAY) ./cmd/gateway
+
+build-controlplane:
+	@mkdir -p $(BIN_DIR)
+	go build -ldflags="-s -w" -o $(CONTROLPLANE) ./cmd/controlplane
+
+build-worker:
+	@mkdir -p $(BIN_DIR)
+	go build -ldflags="-s -w" -o $(WORKER) ./cmd/worker
+
+build-cli:
+	@mkdir -p $(BIN_DIR)
+	go build -ldflags="-s -w" -o $(CLI) ./cmd/cli
+
+run-gateway:
+	go run ./cmd/gateway
+
+run-controlplane:
+	go run ./cmd/controlplane
+
+run-worker:
+	go run ./cmd/worker
 
 test:
 	go test -v ./...
@@ -16,13 +55,8 @@ test-cover:
 	go test -v -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
 
-clean:
-	rm -rf bin/
-	go clean
-
-deps:
-	go mod tidy
-	go mod download
+test-race:
+	go test -race -v ./...
 
 vet:
 	go vet ./...
@@ -30,28 +64,38 @@ vet:
 fmt:
 	gofmt -w .
 
+fmt-check:
+	@if [ -n "$$(gofmt -l .)" ]; then echo "Not formatted:"; gofmt -l .; exit 1; fi
+
 lint:
 	golangci-lint run ./...
 
-all: fmt vet test build
+deps:
+	go mod tidy
+	go mod download
 
-help:
-	@echo "Comandos disponibles:"
-	@echo "  make build      - Compilar el proxy"
-	@echo "  make run        - Ejecutar el proxy"
-	@echo "  make test       - Ejecutar tests"
-	@echo "  make test-cover - Tests con cobertura"
-	@echo "  make clean      - Limpiar binarios"
-	@echo "  make deps       - Instalar dependencias"
-	@echo "  make vet        - Análisis estático"
-	@echo "  make fmt        - Formatear código"
-	@echo "  make lint       - Linter (golangci-lint)"
-	@echo "  make all        - fmt + vet + test + build"
+clean:
+	rm -rf $(BIN_DIR)
+	go clean
 
-# E2E Tests
-e2e-test:
-go test -v ./tests/e2e/...
+docker-build-gateway:
+	docker build --build-arg SERVICE=gateway -t sentinelflow-gateway:3.0.0 .
 
-# E2E Tests con timeout
-e2e-test-long:
-go test -v -timeout 5m ./tests/e2e/...
+docker-build-controlplane:
+	docker build --build-arg SERVICE=controlplane -t sentinelflow-controlplane:3.0.0 .
+
+docker-build-worker:
+	docker build --build-arg SERVICE=worker -t sentinelflow-worker:3.0.0 .
+
+backup:
+	./scripts/backup-supabase.sh
+
+dr-test:
+	./scripts/dr-test.sh
+
+ci: fmt-check vet test build
+	@echo "CI simulation passed"
+
+all: ci
+
+.DEFAULT_GOAL := help

@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   test:
-    name: Test & Build
+    name: Test & Build V3
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -47,8 +47,23 @@ jobs:
       - name: Coverage
         run: go tool cover -func=coverage.out
 
-      - name: Build
-        run: go build -o bin/proxy cmd/proxy/main.go
+      - name: Build V3 binaries
+        run: |
+          mkdir -p bin
+          echo "Building gateway..."
+          go build -o bin/gateway ./cmd/gateway
+          echo "Building controlplane..."
+          go build -o bin/controlplane ./cmd/controlplane
+          echo "Building worker..."
+          go build -o bin/worker ./cmd/worker
+          echo "Building cli..."
+          go build -o bin/sfctl ./cmd/cli
+          echo "✅ All V3 binaries built"
+
+      - name: Verify binaries
+        run: |
+          ls -lh bin/
+          file bin/gateway bin/controlplane bin/worker bin/sfctl
 
   security:
     name: Security Scan
@@ -58,12 +73,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
       - name: Run Gosec
         uses: securego/gosec@master
         with:
           args: '-no-fail -fmt sarif -out gosec.sarif ./...'
 
-      - name: Upload SARIF
+      - name: Upload Gosec SARIF
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: gosec.sarif
@@ -89,13 +110,13 @@ jobs:
         with:
           context: .
           push: false
-          tags: sentinelflow:test
+          tags: sentinelflow:v3-test
           load: true
 
       - name: Run Trivy scan
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: sentinelflow:test
+          image-ref: sentinelflow:v3-test
           format: 'sarif'
           output: 'trivy.sarif'
           severity: 'CRITICAL,HIGH'

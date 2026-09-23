@@ -1,5 +1,7 @@
 # Build stage
-FROM golang:1.21-alpine AS builder
+FROM golang:1.27-alpine AS builder
+
+ARG SERVICE=gateway
 
 WORKDIR /app
 
@@ -9,26 +11,31 @@ RUN go mod download
 
 # Copiar código y compilar
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o sentinelflow cmd/proxy/main.go
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build \
+    -ldflags="-s -w \
+      -X github.com/lecodev-26/sentinelflow/internal/version.Version=3.0.0" \
+    -trimpath \
+    -o service \
+    ./cmd/${SERVICE}
 
 # Runtime stage
-FROM alpine:latest
+FROM alpine:3.19
 
-RUN apk --no-cache add ca-certificates
+RUN apk --no-cache add ca-certificates tzdata
 
 WORKDIR /app
 
-# Copiar binario y configs
-COPY --from=builder /app/sentinelflow .
-COPY --from=builder /app/configs/ ./configs/
+# Copiar binario y web
+COPY --from=builder /app/service .
 COPY --from=builder /app/web/ ./web/
 
 EXPOSE 8080
+EXPOSE 8081
 EXPOSE 9090
 
 # Health check
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/livez || exit 1
 
-ENTRYPOINT ["./sentinelflow"]
-CMD ["-config", "configs/rules.yaml", "-port", "8080"]
+ENTRYPOINT ["./service"]

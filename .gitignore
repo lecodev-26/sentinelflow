@@ -58,3 +58,5 @@ sentinelflow.db
 *.db
 *.db-shm
 *.db-wal
+backups/
+*.sql.gz
