@@ -307,6 +307,7 @@ func main() {
 		routeReq := &routing.Request{
 			RequestID: req.Header.Get("Idempotency-Key"),
 			Model:     normReq.Model,
+			Residency: middleware.GetResidency(req.Context()),
 		}
 		if routeReq.RequestID == "" {
 			routeReq.RequestID = fmt.Sprintf("%d", time.Now().UnixNano())

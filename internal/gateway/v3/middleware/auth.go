@@ -20,6 +20,7 @@ const (
 	CtxUserID    contextKey = "user_id"
 	CtxAPIKeyID  contextKey = "api_key_id"
 	CtxScopes    contextKey = "scopes"
+	CtxResidency contextKey = "residency"
 )
 
 // Auth valida API keys contra PostgreSQL
@@ -37,7 +38,8 @@ func NewAuth(svc *identity.Service, enabled bool) *Auth {
 func (a *Auth) Handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Skip auth para health/version
-		if r.URL.Path == "/health" || r.URL.Path == "/version" {
+		if r.URL.Path == "/health" || r.URL.Path == "/version" ||
+			r.URL.Path == "/livez" || r.URL.Path == "/readyz" {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -47,6 +49,7 @@ func (a *Auth) Handler(next http.Handler) http.Handler {
 			ctx := context.WithValue(r.Context(), CtxTenantID, "default")
 			ctx = context.WithValue(ctx, CtxOrgID, "default")
 			ctx = context.WithValue(ctx, CtxUserID, "anonymous")
+			ctx = context.WithValue(ctx, CtxResidency, "global")
 			next.ServeHTTP(w, r.WithContext(ctx))
 			return
 		}
@@ -74,8 +77,16 @@ func (a *Auth) Handler(next http.Handler) http.Handler {
 			return
 		}
 
-		logger.Infof("✅ Auth OK: user=%s org=%s scopes=%v",
-			user.ID, user.OrgID, apiKey.Scopes)
+		// Cargar residencia del tenant (org)
+		residency := "global"
+		if org, err := a.svc.GetOrganization(r.Context(), user.OrgID); err == nil {
+			if org.Residency != "" {
+				residency = org.Residency
+			}
+		}
+
+		logger.Infof("✅ Auth OK: user=%s org=%s residency=%s scopes=%v",
+			user.ID, user.OrgID, residency, apiKey.Scopes)
 
 		// Inyectar contexto
 		ctx := context.WithValue(r.Context(), CtxTenantID, user.OrgID)
@@ -84,6 +95,7 @@ func (a *Auth) Handler(next http.Handler) http.Handler {
 		ctx = context.WithValue(ctx, CtxUserID, user.ID)
 		ctx = context.WithValue(ctx, CtxAPIKeyID, apiKey.ID)
 		ctx = context.WithValue(ctx, CtxScopes, apiKey.Scopes)
+		ctx = context.WithValue(ctx, CtxResidency, residency)
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -141,6 +153,14 @@ func GetAPIKeyID(ctx context.Context) string {
 		return v
 	}
 	return ""
+}
+
+// GetResidency devuelve la residencia del contexto
+func GetResidency(ctx context.Context) string {
+	if v, ok := ctx.Value(CtxResidency).(string); ok {
+		return v
+	}
+	return "global"
 }
 
 func writeAuthError(w http.ResponseWriter, message string) {

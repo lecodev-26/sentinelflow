@@ -22,6 +22,7 @@ type RequestContext struct {
 	UserID    string `json:"user_id"`
 	APIKeyID  string `json:"api_key_id"`
 	Role      string `json:"role"`
+	Residency string `json:"residency"` // global, eu, us, apac
 
 	// Petición
 	Method string `json:"method"`
@@ -131,6 +132,20 @@ func (rc *RequestContext) SetProvider(p string) {
 	rc.Provider = p
 }
 
+// SetResidency establece la residencia del tenant
+func (rc *RequestContext) SetResidency(r string) {
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+	rc.Residency = r
+}
+
+// GetResidency devuelve la residencia del tenant
+func (rc *RequestContext) GetResidency() string {
+	rc.mu.RLock()
+	defer rc.mu.RUnlock()
+	return rc.Residency
+}
+
 // SetTokens establece el uso de tokens
 func (rc *RequestContext) SetTokens(input, output, cached int) {
 	rc.mu.Lock()
@@ -183,6 +198,7 @@ func (rc *RequestContext) Snapshot() *RequestContext {
 		UserID:        rc.UserID,
 		APIKeyID:      rc.APIKeyID,
 		Role:          rc.Role,
+		Residency:     rc.Residency,
 		Method:        rc.Method,
 		Path:          rc.Path,
 		Model:         rc.Model,
@@ -226,6 +242,7 @@ func (rc *RequestContext) ToMap() map[string]interface{} {
 		"user_id":       rc.UserID,
 		"api_key_id":    rc.APIKeyID,
 		"role":          rc.Role,
+		"residency":     rc.Residency,
 		"method":        rc.Method,
 		"path":          rc.Path,
 		"model":         rc.Model,
