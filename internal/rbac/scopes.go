@@ -10,6 +10,8 @@ const (
 	ScopeReadUsage     Scope = "usage:read"
 	ScopeReadProviders Scope = "providers:read"
 	ScopeReadAdmin     Scope = "admin:read"
+	ScopeReadTraces    Scope = "traces:read"
+	ScopeReadMetrics   Scope = "metrics:read"
 
 	// Scopes de escritura
 	ScopeWriteChat      Scope = "chat:write"
@@ -98,6 +100,8 @@ var RoleScopes = map[Role][]Scope{
 		ScopeReadUsage,
 		ScopeReadProviders,
 		ScopeReadAdmin,
+		ScopeReadTraces,
+		ScopeReadMetrics,
 	},
 	RoleViewer: {
 		ScopeReadChat,
@@ -105,6 +109,8 @@ var RoleScopes = map[Role][]Scope{
 		ScopeReadUsage,
 		ScopeReadProviders,
 		ScopeReadAdmin,
+		ScopeReadTraces,
+		ScopeReadMetrics,
 	},
 	RoleMember: {
 		ScopeReadChat, ScopeWriteChat,
