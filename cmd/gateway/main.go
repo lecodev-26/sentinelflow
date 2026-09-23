@@ -122,7 +122,7 @@ func main() {
 
 	// === Middlewares ===
 	authMw := middleware.NewAuth(identitySvc, authEnabled)
-	idempotencyMw := middleware.NewIdempotency(24 * time.Hour)
+	idempotencyMw := middleware.NewIdempotencyDistributedMiddleware(pgClient.Idempotency(), true, 24*time.Hour)
 	tracingMw := middleware.NewTracingMiddleware(traceStore, true)
 	policyMw := middleware.NewPolicyMiddleware(policyEvaluator, true)
 	accountingMw := middleware.NewAccountingMiddleware(accountingSvc, true)
