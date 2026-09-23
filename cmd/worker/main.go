@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lecodev-26/sentinelflow/internal/analytics"
+	"github.com/lecodev-26/sentinelflow/internal/audit"
 	"github.com/lecodev-26/sentinelflow/internal/cache"
 	"github.com/lecodev-26/sentinelflow/internal/events"
 	"github.com/lecodev-26/sentinelflow/internal/logger"
@@ -83,6 +84,12 @@ func main() {
 		log.Fatalf("❌ analytics consumer register failed: %v", err)
 	}
 	log.Printf("📊 Analytics consumer registrado")
+
+	auditConsumer := audit.NewConsumer(pool)
+	if err := auditConsumer.Register(bus); err != nil {
+		log.Fatalf("❌ audit consumer register failed: %v", err)
+	}
+	log.Printf("📜 Audit consumer registrado")
 
 	// === Arrancar publisher en goroutine ===
 	pubCtx, pubCancel := context.WithCancel(ctx)
