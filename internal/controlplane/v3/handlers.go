@@ -65,6 +65,9 @@ func (h *Handlers) Register(r *mux.Router) {
 	write.HandleFunc("/users/{id}", h.DeleteUser).Methods("DELETE")
 	write.HandleFunc("/users/{id}/api-keys", h.CreateAPIKey).Methods("POST")
 	write.HandleFunc("/api-keys/{id}", h.RevokeAPIKey).Methods("DELETE")
+
+	// === Webhooks ===
+	h.RegisterWebhooks(api)
 }
 
 // === ORGANIZATIONS ===

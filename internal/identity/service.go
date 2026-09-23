@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"strings"
 	"time"
 
@@ -17,6 +18,7 @@ type Service struct {
 	projects *postgres.ProjectRepo
 	users    *postgres.UserRepo
 	keys     *postgres.APIKeyRepo
+	client   *postgres.Client
 }
 
 // NewService crea un nuevo servicio
@@ -26,6 +28,7 @@ func NewService(client *postgres.Client) *Service {
 		projects: client.Projects(),
 		users:    client.Users(),
 		keys:     client.APIKeys(),
+		client:   client,
 	}
 }
 
@@ -310,4 +313,13 @@ func (s *Service) GetUserByEmail(ctx context.Context, email string) (*postgres.U
 		return nil, errors.New("email is required")
 	}
 	return s.users.GetByEmail(ctx, strings.ToLower(strings.TrimSpace(email)))
+}
+
+// Pool expone el pool de Postgres subyacente.
+// Uso interno por controlplane para queries ad-hoc (webhooks, etc.).
+func (s *Service) Pool() *pgxpool.Pool {
+	if s.client == nil {
+		return nil
+	}
+	return s.client.Pool()
 }

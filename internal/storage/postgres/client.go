@@ -51,6 +51,10 @@ func New(ctx context.Context, cfg Config) (*Client, error) {
 	poolCfg.MaxConnIdleTime = cfg.MaxConnIdleTime
 	poolCfg.ConnConfig.ConnectTimeout = cfg.ConnectTimeout
 
+	// Transaction pooler (Supabase 6543, PgBouncer) no soporta prepared statements.
+	// QueryExecModeExec evita el cache de prepared statements por conexión.
+	poolCfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeExec
+
 	// Crear pool
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {

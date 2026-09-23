@@ -67,3 +67,4 @@ backups/
 /controlplane
 /cli
 /sentinelflow
+.env.bak

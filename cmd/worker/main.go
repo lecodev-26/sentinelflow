@@ -16,6 +16,7 @@ import (
 	"github.com/lecodev-26/sentinelflow/internal/security"
 	"github.com/lecodev-26/sentinelflow/internal/storage/postgres"
 	"github.com/lecodev-26/sentinelflow/internal/version"
+	"github.com/lecodev-26/sentinelflow/internal/webhooks"
 )
 
 func main() {
@@ -98,6 +99,12 @@ func main() {
 	}
 	log.Printf("🛡️ Security consumer registrado")
 
+	webhookConsumer := webhooks.NewConsumer(pool)
+	if err := webhookConsumer.Register(bus); err != nil {
+		log.Fatalf("❌ webhook consumer register failed: %v", err)
+	}
+	log.Printf("🔗 Webhook consumer registrado")
+
 	// === Arrancar publisher en goroutine ===
 	pubCtx, pubCancel := context.WithCancel(ctx)
 	defer pubCancel()
@@ -107,6 +114,17 @@ func main() {
 		}
 	}()
 	log.Printf("📤 OutboxPublisher activo")
+
+	// === Webhook Dispatcher ===
+	dispatcher := webhooks.NewDispatcher(pool, webhooks.DefaultDispatcherConfig())
+	dispCtx, dispCancel := context.WithCancel(ctx)
+	defer dispCancel()
+	go func() {
+		if err := dispatcher.Run(dispCtx); err != nil && err != context.Canceled {
+			log.Printf("⚠️ WebhookDispatcher terminó: %v", err)
+		}
+	}()
+	log.Printf("🔗 WebhookDispatcher activo")
 
 	logger.Info("⚙️ Worker listo (event consumers)")
 
