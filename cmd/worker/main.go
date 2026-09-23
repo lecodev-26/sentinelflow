@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/lecodev-26/sentinelflow/internal/analytics"
 	"github.com/lecodev-26/sentinelflow/internal/cache"
 	"github.com/lecodev-26/sentinelflow/internal/events"
 	"github.com/lecodev-26/sentinelflow/internal/logger"
@@ -75,6 +76,13 @@ func main() {
 		log.Fatalf("❌ pgClient.Pool() returned nil; revisar internal/storage/postgres")
 	}
 	outbox := events.NewOutbox(pool, bus, events.DefaultOutboxConfig())
+
+	// === Consumers ===
+	analyticsConsumer := analytics.NewConsumer(pool)
+	if err := analyticsConsumer.Register(bus); err != nil {
+		log.Fatalf("❌ analytics consumer register failed: %v", err)
+	}
+	log.Printf("📊 Analytics consumer registrado")
 
 	// === Arrancar publisher en goroutine ===
 	pubCtx, pubCancel := context.WithCancel(ctx)
