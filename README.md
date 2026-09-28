@@ -1,3 +1,9 @@
+<div align="center">
+
+<img src="sentinelflow_transparent.png" alt="SentinelFlow logo" width="260">
+
+</div>
+
 # SentinelFlow
 
 <div align="center">
