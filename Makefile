@@ -11,7 +11,7 @@ WORKER := $(BIN_DIR)/worker
 CLI := $(BIN_DIR)/sfctl
 
 help:
-	@echo "SentinelFlow V3 - Available targets:"
+	@echo "SentinelFlow V4 - Available targets:"
 	@echo ""
 	@echo "  Build:  make build | build-gateway | build-controlplane | build-worker | build-cli"
 	@echo "  Run:    make run-gateway | run-controlplane | run-worker"
@@ -21,7 +21,7 @@ help:
 	@echo "  CI:     make ci"
 
 build: build-gateway build-controlplane build-worker build-cli
-	@echo "All V3 binaries built in $(BIN_DIR)/"
+	@echo "All V4 binaries built in $(BIN_DIR)/"
 
 build-gateway:
 	@mkdir -p $(BIN_DIR)
