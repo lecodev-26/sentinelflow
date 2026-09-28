@@ -16,9 +16,10 @@ import (
 
 // OpenAIAdapter implementa el provider para OpenAI
 type OpenAIAdapter struct {
-	apiKey  string
-	baseURL string
-	client  *http.Client
+	apiKey         string
+	baseURL        string
+	client         *http.Client
+	credentialPool *v3.CredentialPool
 }
 
 // NewOpenAIAdapter crea un nuevo adapter de OpenAI
@@ -31,6 +32,18 @@ func NewOpenAIAdapter(apiKey, baseURL string) *OpenAIAdapter {
 		baseURL: baseURL,
 		client:  &http.Client{Timeout: 60 * time.Second},
 	}
+}
+
+func (a *OpenAIAdapter) SetCredentialPool(pool *v3.CredentialPool) { a.credentialPool = pool }
+func (a *OpenAIAdapter) credential() (string, func(bool), error) {
+	if a.credentialPool == nil {
+		return a.apiKey, func(bool) {}, nil
+	}
+	c, err := a.credentialPool.Acquire()
+	if err != nil {
+		return "", func(bool) {}, err
+	}
+	return c.Secret, func(ok bool) { a.credentialPool.Release(c.ID, ok) }, nil
 }
 
 func (a *OpenAIAdapter) ID() string   { return "openai" }
@@ -49,6 +62,13 @@ func (a *OpenAIAdapter) Models(ctx context.Context) ([]v3.ModelInfo, error) {
 }
 
 func (a *OpenAIAdapter) Chat(ctx context.Context, req *v3.ChatRequest) (*v3.ChatResponse, error) {
+	credential, release, credentialErr := a.credential()
+	if credentialErr != nil {
+		return nil, credentialErr
+	}
+	success := false
+	defer func() { release(success) }()
+
 	start := time.Now()
 
 	body, err := json.Marshal(map[string]interface{}{
@@ -67,7 +87,7 @@ func (a *OpenAIAdapter) Chat(ctx context.Context, req *v3.ChatRequest) (*v3.Chat
 		return nil, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+a.apiKey)
+	httpReq.Header.Set("Authorization", "Bearer "+credential)
 
 	resp, err := a.client.Do(httpReq)
 	if err != nil {
@@ -134,10 +154,18 @@ func (a *OpenAIAdapter) Chat(ctx context.Context, req *v3.ChatRequest) (*v3.Chat
 		TotalTokens:      apiResp.Usage.TotalTokens,
 	}
 
+	success = true
 	return result, nil
 }
 
 func (a *OpenAIAdapter) Stream(ctx context.Context, req *v3.ChatRequest) (<-chan v3.StreamChunk, error) {
+	credential, release, credentialErr := a.credential()
+	if credentialErr != nil {
+		return nil, credentialErr
+	}
+	success := false
+	defer func() { release(success) }()
+
 	body, err := json.Marshal(map[string]interface{}{
 		"model":       req.Model,
 		"messages":    req.Messages,
@@ -154,7 +182,7 @@ func (a *OpenAIAdapter) Stream(ctx context.Context, req *v3.ChatRequest) (<-chan
 		return nil, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+a.apiKey)
+	httpReq.Header.Set("Authorization", "Bearer "+credential)
 
 	resp, err := a.client.Do(httpReq)
 	if err != nil {
@@ -213,6 +241,7 @@ func (a *OpenAIAdapter) Stream(ctx context.Context, req *v3.ChatRequest) (<-chan
 		}
 	}()
 
+	success = true
 	return chunks, nil
 }
 

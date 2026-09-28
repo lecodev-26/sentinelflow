@@ -15,9 +15,10 @@ import (
 )
 
 type AnthropicAdapter struct {
-	apiKey  string
-	baseURL string
-	client  *http.Client
+	apiKey         string
+	baseURL        string
+	client         *http.Client
+	credentialPool *v3.CredentialPool
 }
 
 func NewAnthropicAdapter(apiKey, baseURL string) *AnthropicAdapter {
@@ -29,6 +30,18 @@ func NewAnthropicAdapter(apiKey, baseURL string) *AnthropicAdapter {
 		baseURL: baseURL,
 		client:  &http.Client{Timeout: 60 * time.Second},
 	}
+}
+
+func (a *AnthropicAdapter) SetCredentialPool(pool *v3.CredentialPool) { a.credentialPool = pool }
+func (a *AnthropicAdapter) credential() (string, func(bool), error) {
+	if a.credentialPool == nil {
+		return a.apiKey, func(bool) {}, nil
+	}
+	c, err := a.credentialPool.Acquire()
+	if err != nil {
+		return "", func(bool) {}, err
+	}
+	return c.Secret, func(ok bool) { a.credentialPool.Release(c.ID, ok) }, nil
 }
 
 func (a *AnthropicAdapter) ID() string   { return "anthropic" }
@@ -47,6 +60,13 @@ func (a *AnthropicAdapter) Models(ctx context.Context) ([]v3.ModelInfo, error) {
 }
 
 func (a *AnthropicAdapter) Chat(ctx context.Context, req *v3.ChatRequest) (*v3.ChatResponse, error) {
+	credential, release, credentialErr := a.credential()
+	if credentialErr != nil {
+		return nil, credentialErr
+	}
+	success := false
+	defer func() { release(success) }()
+
 	start := time.Now()
 
 	// Separar system de messages
@@ -85,7 +105,7 @@ func (a *AnthropicAdapter) Chat(ctx context.Context, req *v3.ChatRequest) (*v3.C
 		return nil, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("x-api-key", a.apiKey)
+	httpReq.Header.Set("x-api-key", credential)
 	httpReq.Header.Set("anthropic-version", "2023-06-01")
 
 	resp, err := a.client.Do(httpReq)
@@ -154,6 +174,13 @@ func (a *AnthropicAdapter) Chat(ctx context.Context, req *v3.ChatRequest) (*v3.C
 }
 
 func (a *AnthropicAdapter) Stream(ctx context.Context, req *v3.ChatRequest) (<-chan v3.StreamChunk, error) {
+	credential, release, credentialErr := a.credential()
+	if credentialErr != nil {
+		return nil, credentialErr
+	}
+	success := false
+	defer func() { release(success) }()
+
 	var system string
 	var messages []map[string]string
 	for _, m := range req.Messages {
@@ -181,7 +208,7 @@ func (a *AnthropicAdapter) Stream(ctx context.Context, req *v3.ChatRequest) (<-c
 		return nil, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("x-api-key", a.apiKey)
+	httpReq.Header.Set("x-api-key", credential)
 	httpReq.Header.Set("anthropic-version", "2023-06-01")
 
 	resp, err := a.client.Do(httpReq)
@@ -232,6 +259,7 @@ func (a *AnthropicAdapter) Stream(ctx context.Context, req *v3.ChatRequest) (<-c
 		}
 	}()
 
+	success = true
 	return chunks, nil
 }
 
