@@ -28,7 +28,7 @@ func NewAccountingMiddleware(service *accountingv3.Service, enabled bool) *Accou
 // Handler envuelve un handler con accounting
 func (m *AccountingMiddleware) Handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !m.enabled || m.service == nil || r.Method != http.MethodPost || r.URL.Path != "/v1/chat/completions" {
+		if !m.enabled || m.service == nil || r.Method != http.MethodPost || (r.URL.Path != "/v1/chat/completions" && r.URL.Path != "/v1/responses") {
 			next.ServeHTTP(w, r)
 			return
 		}

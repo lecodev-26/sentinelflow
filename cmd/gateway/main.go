@@ -491,6 +491,55 @@ func main() {
 		),
 	).Methods("POST")
 
+	// --- /v1/responses (OpenAI Responses-compatible gateway) ---
+	responsesHandler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", "error reading body")
+			return
+		}
+		normReq, err := normalizerSvc.NormalizeResponses(body)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+		routeReq := &routing.Request{RequestID: req.Header.Get("Idempotency-Key"), Model: normReq.Model, Residency: middleware.GetResidency(req.Context())}
+		if routeReq.RequestID == "" {
+			routeReq.RequestID = fmt.Sprintf("%d", time.Now().UnixNano())
+		}
+		if normReq.Stream {
+			routeReq.RequiredCapabilities = []string{"stream"}
+		}
+		candidates, err := routingEngine.OrderByScore(routeReq)
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, "no_provider", err.Error())
+			return
+		}
+		chatReq := &providers.ChatRequest{Model: normReq.Model, Stream: normReq.Stream}
+		for _, m := range normReq.Messages {
+			chatReq.Messages = append(chatReq.Messages, providers.Message{Role: m.Role, Content: m.Content})
+		}
+		resp, attempts, err := exec.ExecuteChat(req.Context(), candidates, chatReq)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "all_providers_failed", err.Error())
+			return
+		}
+		providerID := ""
+		for _, a := range attempts {
+			if a.Success {
+				providerID = a.ProviderID
+			}
+		}
+		output := make([]map[string]interface{}, 0, len(resp.Choices))
+		for _, c := range resp.Choices {
+			output = append(output, map[string]interface{}{"type": "message", "role": "assistant", "content": []map[string]interface{}{{"type": "output_text", "text": c.Message.Content}}})
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Provider", providerID)
+		json.NewEncoder(w).Encode(map[string]interface{}{"id": resp.ID, "object": "response", "model": resp.Model, "output": output, "usage": resp.Usage, "status": "completed"})
+	})
+	r.Handle("/v1/responses", authMw.Handler(middleware.RequireScope(rbac.ScopeWriteChat)(idempotencyMw.Handler(tracingMw.Handler(policyMw.Handler(accountingMw.Handler(responsesHandler))))))).Methods("POST")
+
 	// === Server ===
 	srv := &http.Server{
 		Addr:         ":8080",

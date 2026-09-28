@@ -42,7 +42,7 @@ func NewPolicyMiddleware(evaluator *policyv3.Evaluator, enabled bool, emitter *s
 func (m *PolicyMiddleware) Handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Solo procesar POST de chat
-		if r.Method != http.MethodPost || r.URL.Path != "/v1/chat/completions" {
+		if r.Method != http.MethodPost || (r.URL.Path != "/v1/chat/completions" && r.URL.Path != "/v1/responses") {
 			next.ServeHTTP(w, r)
 			return
 		}
