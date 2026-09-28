@@ -27,18 +27,21 @@ type Message struct {
 
 // ChatRequest es la petición normalizada interna
 type ChatRequest struct {
-	Model       string    `json:"model"`
-	Messages    []Message `json:"messages"`
-	Temperature *float32  `json:"temperature,omitempty"`
-	MaxTokens   *int      `json:"max_tokens,omitempty"`
-	Stream      bool      `json:"stream"`
+	Model       string      `json:"model"`
+	Messages    []Message   `json:"messages"`
+	Temperature *float32    `json:"temperature,omitempty"`
+	MaxTokens   *int        `json:"max_tokens,omitempty"`
+	Tools       []ToolSpec  `json:"tools,omitempty"`
+	ToolChoice  *ToolChoice `json:"tool_choice,omitempty"`
+	Stream      bool        `json:"stream"`
 }
 
 // Choice es una opción de respuesta
 type Choice struct {
-	Index        int     `json:"index"`
-	Message      Message `json:"message"`
-	FinishReason string  `json:"finish_reason,omitempty"`
+	Index        int        `json:"index"`
+	Message      Message    `json:"message"`
+	FinishReason string     `json:"finish_reason,omitempty"`
+	ToolCalls    []ToolCall `json:"tool_calls,omitempty"`
 }
 
 // Usage contiene el uso de tokens
