@@ -1,0 +1,63 @@
+services:
+  gateway:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.v4
+      args: {SERVICE: gateway, VERSION: 4.0.0}
+    environment:
+      SENTINELFLOW_DATABASE_URL: postgres://sentinelflow:${POSTGRES_PASSWORD:-sentinelflow}@postgres:5432/sentinelflow?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      SENTINELFLOW_ENV: production
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports: ["8080:8080"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+  controlplane:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.v4
+      args: {SERVICE: controlplane, VERSION: 4.0.0}
+    environment:
+      SENTINELFLOW_DATABASE_URL: postgres://sentinelflow:${POSTGRES_PASSWORD:-sentinelflow}@postgres:5432/sentinelflow?sslmode=disable
+      SENTINELFLOW_ENV: production
+    ports: ["8081:8081"]
+    depends_on:
+      postgres: {condition: service_healthy}
+  worker:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.v4
+      args: {SERVICE: worker, VERSION: 4.0.0}
+    environment:
+      SENTINELFLOW_DATABASE_URL: postgres://sentinelflow:${POSTGRES_PASSWORD:-sentinelflow}@postgres:5432/sentinelflow?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      SENTINELFLOW_ENV: production
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: sentinelflow
+      POSTGRES_USER: sentinelflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sentinelflow}
+    volumes: [sentinelflow-pg:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinelflow -d sentinelflow"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server","--appendonly","yes"]
+    volumes: [sentinelflow-redis:/data]
+    healthcheck:
+      test: ["CMD","redis-cli","ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+volumes:
+  sentinelflow-pg:
+  sentinelflow-redis:
