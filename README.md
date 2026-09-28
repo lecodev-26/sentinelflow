@@ -1,6 +1,10 @@
 <div align="center">
 
-# 🛡️ SentinelFlow
+#  SentinelFlow
+<p align="center">
+  <img src="./sentinelflow_transparent.png" width="120" alt="SentinelFlow" />
+</p>
+
 
 **AI Gateway & Control Plane para aplicaciones multi-LLM**
 
