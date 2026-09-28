@@ -3,7 +3,7 @@ terraform {
   required_providers { kubernetes = { source = "hashicorp/kubernetes", version = ">= 2.30" } }
 }
 variable "namespace" { type = string, default = "sentinelflow" }
-variable "image" { type = string, default = "sentinelflow:4.0.0" }
+variable "image" { type = string, default = "sentinelflow:5.0.0" }
 provider "kubernetes" {}
 resource "kubernetes_namespace" "sentinelflow" { metadata { name = var.namespace } }
 resource "kubernetes_deployment" "gateway" {

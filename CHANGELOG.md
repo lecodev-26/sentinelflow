@@ -1,3 +1,20 @@
+## [5.0.0] - 2026-09-28
+
+### Added
+- Intelligent AI core with intent, complexity and capability analysis.
+- Adaptive routing and outcome learning primitives.
+- Agent runtime with approvals, cancellation and tool execution.
+- Tenant/project-isolated memory and knowledge/RAG foundations.
+- AI Security 2.0 with risk-based ALLOW/REVIEW/BLOCK decisions.
+- Predictive FinOps, semantic AI observability and evaluation primitives.
+- Prompt versioning, multimodal request parts and AI governance.
+- Plugin registry, global routing, self-healing, Zero Trust AI and autoscaling foundations.
+- Dedicated V5 CI, regression harness and release documentation.
+
+### Release status
+- V5.0.0 is the current GA release line.
+- Production deployment remains environment-specific; follow the V5 production-readiness checklist before operating at scale.
+
 ## [4.0.0] - 2026-09-28
 
 ### Added

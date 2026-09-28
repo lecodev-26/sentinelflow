@@ -60,7 +60,7 @@ backups/
 sdk/python/sentinelflow/__pycache__/
 *.pyc
 
-# V4 local runtime artifacts
+# V5 local runtime artifacts
 *.db
 *.db-*
 coverage.out

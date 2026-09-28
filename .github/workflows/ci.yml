@@ -1,9 +1,9 @@
 name: SentinelFlow V5 CI
 on:
   push:
-    branches: [v5]
+    branches: [main]
   pull_request:
-    branches: [v5]
+    branches: [main]
 permissions:
   contents: read
 jobs:

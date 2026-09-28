@@ -12,11 +12,11 @@ Requirements: Go 1.27+, PostgreSQL and Redis for distributed paths.
 
 Configure your own PostgreSQL/Redis/provider credentials in the environment. Never commit `.env`.
 
-## V4 Compose
+## V5 Compose
 
-    docker compose -f deploy/v4/docker-compose.yml up --build
+    docker compose -f deploy/v5/docker-compose.yml up --build
 
-For production deployment, follow [deployment.md](deployment.md) and the [readiness checklist](v4/production-readiness.md).
+For production deployment, follow [deployment.md](deployment.md) and the [readiness checklist](v5/ga/production-readiness.md).
 
 ## Migrations
 

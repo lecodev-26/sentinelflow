@@ -1,19 +1,24 @@
-# Roadmap
+# SentinelFlow Roadmap
 
-## Completed
+## V5.0.0 — current GA
 
-- V3.1–V3.8: event plane, real request paths, security, enterprise, routing, FinOps, tools, resilience and developer experience.
-- V4.0: foundation, clean command layout, V4 CI/security, Docker and feature flags.
-- V4.1: distributed runtime contracts.
-- V4.2: control-plane policy lifecycle.
-- V4.3: intelligent routing contracts and explainability.
-- V4.4: FinOps forecasting and budget enforcement primitives.
-- V4.5: observability/SLO/error-budget foundations.
-- V4.6: enterprise ABAC and secret-store contracts.
-- V4.7: deployment foundations and production-readiness documentation.
+V5 adds intelligent AI execution capabilities on top of the V4 enterprise foundation:
 
-## Next
+- intelligent request understanding and adaptive routing
+- agent runtime and universal tool gateway
+- tenant/project-isolated memory and knowledge/RAG
+- AI Security 2.0
+- predictive AI FinOps
+- AI observability and evaluation
+- prompt lifecycle management
+- multimodal request primitives
+- AI governance and plugin extensibility
+- global routing and self-healing primitives
+- learning signals and Zero Trust AI
+- capacity/autoscaling foundations
 
-V5 is intentionally not specified yet. The next roadmap will be designed from real V4 usage, contributor feedback, operational gaps and concrete product priorities.
+See [V5 architecture](v5/ARCHITECTURE.md), [V5 GA](v5/ga/GA.md), and [production readiness](v5/ga/production-readiness.md).
 
-See `CHANGELOG.md` for implementation history. Avoid treating a roadmap item as production capability until its code path, tests, observability and failure behavior are exercised.
+## Beyond V5
+
+Future work is driven by production usage, contributor feedback, provider evolution, operational evidence and explicit security/reliability requirements. New milestones will be published as they are designed and validated.

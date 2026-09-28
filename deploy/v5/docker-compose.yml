@@ -2,8 +2,8 @@ services:
   gateway:
     build:
       context: ../..
-      dockerfile: Dockerfile.v4
-      args: {SERVICE: gateway, VERSION: 4.0.0}
+      dockerfile: Dockerfile
+      args: {SERVICE: gateway, VERSION: 5.0.0}
     environment:
       SENTINELFLOW_DATABASE_URL: postgres://sentinelflow:${POSTGRES_PASSWORD:-sentinelflow}@postgres:5432/sentinelflow?sslmode=disable
       REDIS_URL: redis://redis:6379
@@ -17,8 +17,8 @@ services:
   controlplane:
     build:
       context: ../..
-      dockerfile: Dockerfile.v4
-      args: {SERVICE: controlplane, VERSION: 4.0.0}
+      dockerfile: Dockerfile
+      args: {SERVICE: controlplane, VERSION: 5.0.0}
     environment:
       SENTINELFLOW_DATABASE_URL: postgres://sentinelflow:${POSTGRES_PASSWORD:-sentinelflow}@postgres:5432/sentinelflow?sslmode=disable
       SENTINELFLOW_ENV: production
@@ -28,8 +28,8 @@ services:
   worker:
     build:
       context: ../..
-      dockerfile: Dockerfile.v4
-      args: {SERVICE: worker, VERSION: 4.0.0}
+      dockerfile: Dockerfile
+      args: {SERVICE: worker, VERSION: 5.0.0}
     environment:
       SENTINELFLOW_DATABASE_URL: postgres://sentinelflow:${POSTGRES_PASSWORD:-sentinelflow}@postgres:5432/sentinelflow?sslmode=disable
       REDIS_URL: redis://redis:6379

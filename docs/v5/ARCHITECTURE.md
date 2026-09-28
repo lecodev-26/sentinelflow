@@ -1,12 +1,12 @@
 # SentinelFlow V5 Architecture
 
-V5 layers intelligent execution over the V4 control/data/event/provider/observability planes.
+V5 adds an intelligent execution layer over SentinelFlow’s enterprise control/data/event/provider/observability foundation.
 
 ```text
 Client
   |
   v
-V4 Gateway
+SentinelFlow Gateway
   |
   +--> AI Understanding ------> Requirements
   |
@@ -38,4 +38,4 @@ Response
 - Agent steps do not bypass tool authorization or approval requirements.
 - Adaptive learning records signals; it does not silently mutate production policy.
 - Governance constrains execution; it does not replace authentication/authorization.
-- V5 contracts are additive to V4 until a migration replaces the legacy implementation path.
+- V5 keeps the proven enterprise foundation stable while introducing explicit V5 contracts; internal compatibility packages remain versioned where needed for safe evolution.

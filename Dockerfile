@@ -1,6 +1,6 @@
 FROM golang:1.27-alpine AS build
 ARG SERVICE=gateway
-ARG VERSION=4.0.0
+ARG VERSION=5.0.0
 WORKDIR /src
 RUN apk add --no-cache ca-certificates git
 COPY go.mod go.sum ./

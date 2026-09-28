@@ -30,4 +30,4 @@ Tenant and environment are derived from authenticated context, not trusted reque
 
 Routing selection is distinct from execution fallback. Pre-stream failures may retry/fail over when policy permits; post-stream failures are recorded as partial responses. Events use event IDs and idempotent consumers rather than relying on exactly-once delivery.
 
-See the ADRs under `docs/v3/adr` and the V4 production notes for historical decisions and current direction.
+See the ADRs under `docs/v3/adr` and the V5 production notes for historical decisions and current direction.

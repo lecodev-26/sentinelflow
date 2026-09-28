@@ -1,6 +1,0 @@
-apiVersion: v2
-name: sentinelflow
-description: SentinelFlow V4 AI Gateway
-type: application
-version: 4.0.0
-appVersion: "4.0.0"

@@ -1,6 +1,6 @@
 image:
   repository: sentinelflow
-  tag: "4.0.0"
+  tag: "5.0.0"
 replicaCount: 2
 service:
   port: 8080

@@ -17,7 +17,7 @@ V5 evolves SentinelFlow from enterprise AI infrastructure into an intelligent AI
 - **V5.10 Prompt Management:** versioned prompt registry with publish/active state.
 - **V5.11 Multimodal:** normalized text/image/audio/video/document request parts.
 - **V5.12 Governance:** governed inventory of AI assets and policy constraints.
-- **V5.13 Developer Platform:** V4 portal foundations remain the UI surface; V5 contracts expose the underlying platform capabilities.
+- **V5.13 Developer Platform:** The existing developer portal remains the UI surface while V5 contracts expose the underlying platform capabilities.
 - **V5.14 Extensibility:** plugin registry for providers, tools, policies, evaluators and storage.
 - **V5.15 Global Infrastructure:** health/capacity/latency-aware regional selection.
 - **V5.16 Self-Healing:** incident observation and recovery-state controller.

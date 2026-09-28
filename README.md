@@ -12,7 +12,7 @@
 
 [![Go](https://img.shields.io/badge/Go-1.27+-00ADD8?logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![CI](https://github.com/lecodev-26/sentinelflow/actions/workflows/v4-ci.yml/badge.svg)](https://github.com/lecodev-26/sentinelflow/actions/workflows/v4-ci.yml)
+[![CI](https://github.com/lecodev-26/sentinelflow/actions/workflows/ci.yml/badge.svg)](https://github.com/lecodev-26/sentinelflow/actions/workflows/ci.yml)
 [![Open Issues](https://img.shields.io/github/issues/lecodev-26/sentinelflow)](https://github.com/lecodev-26/sentinelflow/issues)
 [![Stars](https://img.shields.io/github/stars/lecodev-26/sentinelflow)](https://github.com/lecodev-26/sentinelflow/stargazers)
 
@@ -24,11 +24,11 @@ SentinelFlow sits between applications and AI providers and turns a collection o
 
 It provides one gateway for authentication, tenant isolation, policy enforcement, routing, provider failover, usage accounting, security controls, events, audit and operations.
 
-> **Project status:** V4 architecture and roadmap are implemented in the repository. Production deployment still requires environment-specific PostgreSQL/Redis, provider credentials, identity configuration and operational verification. See [production readiness](docs/v4/production-readiness.md).
+> **Project status:** V5.0.0 is the current GA release. Production deployment still requires environment-specific PostgreSQL/Redis, provider credentials, identity configuration and operational verification. See [production readiness](docs/v5/ga/production-readiness.md).
 
-## V5 development
+## V5.0.0
 
-> SentinelFlow V5 is developed on the `v5` branch. It adds intelligent request understanding, adaptive routing, agent runtime, tools, memory/RAG, AI security, evaluation and governance. See [V5 architecture](docs/v5/ARCHITECTURE.md) and [V5 roadmap](docs/v5/ROADMAP.md).
+> SentinelFlow V5 is the current GA release. It adds intelligent request understanding, adaptive routing, agent runtime, tools, memory/RAG, AI security, evaluation and governance. See [V5 architecture](docs/v5/ARCHITECTURE.md), [V5 roadmap](docs/v5/ROADMAP.md) and [V5 GA](docs/v5/ga/GA.md).
 
 ## What can you build with it?
 
@@ -71,7 +71,7 @@ A typical request follows:
 
 `Client → Request ID → Auth → Tenant/Project → Authorization → Quota/Rate limit → Policy/Security → Idempotency/Cache → Routing → Provider → Fallback → Streaming → Usage/Events → Trace → Response`
 
-See [architecture.md](docs/architecture.md) and the [V4 architecture notes](docs/v4/GA.md).
+See [architecture.md](docs/architecture.md) and the [V5 architecture notes](docs/v5/ga/GA.md).
 
 ## Core capabilities
 
@@ -94,7 +94,7 @@ See [architecture.md](docs/architecture.md) and the [V4 architecture notes](docs
 ### Requirements
 
 - Go 1.27+
-- PostgreSQL 15+ (17 recommended for the V4 Compose stack)
+- PostgreSQL 15+ (17 recommended for the V5 Compose stack)
 - Redis 7+
 - Provider credentials for the providers you enable
 - Docker/Compose for the local multi-service stack
@@ -119,15 +119,15 @@ cp .env.example .env
 
 Never commit `.env` or real provider credentials.
 
-SentinelFlow V4 does **not** use the removed legacy `rules.yaml` configuration. Runtime policy belongs in the control plane/database, while production secrets should come from an external secret manager or the configured secret store.
+SentinelFlow V5.0.0 does **not** use the removed legacy `rules.yaml` configuration. Runtime policy belongs in the control plane/database, while production secrets should come from an external secret manager or the configured secret store.
 
 ### Docker Compose
 
 ```bash
-docker compose -f deploy/v4/docker-compose.yml up --build
+docker compose -f deploy/v5/docker-compose.yml up --build
 ```
 
-The V4 Compose stack provides Gateway, Control Plane, Worker, PostgreSQL and Redis. It is a development/reference deployment, not a turnkey production environment.
+The V5 Compose stack provides Gateway, Control Plane, Worker, PostgreSQL and Redis. It is a development/reference deployment, not a turnkey production environment.
 
 ### Migrations
 
@@ -154,7 +154,7 @@ For deployment and operations, see:
 - [Quickstart](docs/quickstart.md)
 - [Deployment](docs/deployment.md)
 - [Operations](docs/operations.md)
-- [Production readiness](docs/v4/production-readiness.md)
+- [Production readiness](docs/v5/ga/production-readiness.md)
 
 ## SDKs
 
@@ -175,7 +175,7 @@ sentinelflow/
 ├── cmd/                 # gateway, controlplane, worker, cli, migrator
 ├── internal/            # domain and runtime packages
 ├── migrations/          # database migrations
-├── deploy/v4/            # Docker Compose, Helm and Terraform
+├── deploy/v5/            # Docker Compose, Helm and Terraform
 ├── sdk/                 # Go and Python clients
 ├── tests/               # integration/load/e2e tests
 ├── docs/                # architecture, API, operations and ADRs
@@ -212,10 +212,10 @@ The repository also includes CI checks for dependency verification, filesystem v
 ## Roadmap
 
 - **V3:** enterprise, routing, FinOps, security, developer experience and resilience foundations.
-- **V4:** AI Gateway + intelligent routing + policy + FinOps + enterprise control plane + distributed runtime.
-- **V5:** planned with the next roadmap maintained separately from this release.
+- **V4:** enterprise gateway/control-plane foundation.
+- **V5:** intelligent AI execution platform and current GA release.
 
-See [CHANGELOG.md](CHANGELOG.md) for project history and [V4 GA](docs/v4/GA.md) for the current architecture milestone.
+See [CHANGELOG.md](CHANGELOG.md) for project history and [V5 GA](docs/v5/ga/GA.md) for the current architecture milestone.
 
 ## Contributing
 
