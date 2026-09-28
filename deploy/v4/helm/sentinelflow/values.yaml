@@ -1,0 +1,11 @@
+image:
+  repository: sentinelflow
+  tag: "4.0.0"
+replicaCount: 2
+service:
+  port: 8080
+env:
+  SENTINELFLOW_ENV: production
+resources:
+  requests: {cpu: 250m, memory: 256Mi}
+  limits: {cpu: "2", memory: 1Gi}
