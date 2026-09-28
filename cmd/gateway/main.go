@@ -151,6 +151,8 @@ func main() {
 	policyMw := middleware.NewPolicyMiddleware(policyEvaluator, true, secEmitter)
 	accountingMw := middleware.NewAccountingMiddleware(accountingSvc, true)
 	normalizerSvc := normalizer.New()
+	anomalyDetector := securityv3.NewAnomalyDetector(time.Minute, 60, 1000)
+	anomalyMw := middleware.NewAnomalyMiddleware(anomalyDetector)
 
 	// === Router ===
 	r := mux.NewRouter()
@@ -480,10 +482,12 @@ func main() {
 	r.Handle("/v1/chat/completions",
 		authMw.Handler(
 			middleware.RequireScope(rbac.ScopeWriteChat)(
-				idempotencyMw.Handler(
-					tracingMw.Handler(
-						policyMw.Handler(
-							accountingMw.Handler(chatHandler),
+				anomalyMw.Handler(
+					idempotencyMw.Handler(
+						tracingMw.Handler(
+							policyMw.Handler(
+								accountingMw.Handler(chatHandler),
+							),
 						),
 					),
 				),
@@ -538,7 +542,18 @@ func main() {
 		w.Header().Set("X-Provider", providerID)
 		json.NewEncoder(w).Encode(map[string]interface{}{"id": resp.ID, "object": "response", "model": resp.Model, "output": output, "usage": resp.Usage, "status": "completed"})
 	})
-	r.Handle("/v1/responses", authMw.Handler(middleware.RequireScope(rbac.ScopeWriteChat)(idempotencyMw.Handler(tracingMw.Handler(policyMw.Handler(accountingMw.Handler(responsesHandler))))))).Methods("POST")
+	r.Handle("/v1/responses", authMw.Handler(middleware.RequireScope(rbac.ScopeWriteChat)(anomalyMw.Handler(idempotencyMw.Handler(tracingMw.Handler(policyMw.Handler(accountingMw.Handler(responsesHandler)))))))).Methods("POST")
+
+	// --- /v1/security/anomalies (Security Center) ---
+	r.Handle("/v1/security/anomalies", authMw.Handler(middleware.RequireScope(rbac.ScopeReadAudit)(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		tenantID := middleware.GetTenantID(req.Context())
+		limit := 50
+		if v := req.URL.Query().Get("limit"); v != "" {
+			fmt.Sscanf(v, "%d", &limit)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"anomalies": anomalyDetector.List(tenantID, limit)})
+	})))).Methods("GET")
 
 	// === Server ===
 	srv := &http.Server{
