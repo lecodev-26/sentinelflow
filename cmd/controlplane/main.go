@@ -16,6 +16,7 @@ import (
 	cpv3 "github.com/lecodev-26/sentinelflow/internal/controlplane/v3"
 	oidcv3 "github.com/lecodev-26/sentinelflow/internal/enterprise/v3/oidc"
 	regionsv3 "github.com/lecodev-26/sentinelflow/internal/enterprise/v3/regions"
+	samlv3 "github.com/lecodev-26/sentinelflow/internal/enterprise/v3/saml"
 	scimv3 "github.com/lecodev-26/sentinelflow/internal/enterprise/v3/scim"
 	"github.com/lecodev-26/sentinelflow/internal/events"
 	"github.com/lecodev-26/sentinelflow/internal/gateway/v3/middleware"
@@ -105,6 +106,26 @@ func main() {
 		log.Printf("✅ OIDC provider registrado: github")
 	}
 
+	// === SAML 2.0 Service Provider ===
+	var samlHandler *samlv3.Handler
+	if os.Getenv("SAML_CERT_FILE") != "" || os.Getenv("SAML_KEY_FILE") != "" || os.Getenv("SAML_IDP_METADATA_FILE") != "" || os.Getenv("SAML_IDP_METADATA_URL") != "" {
+		publicURL := os.Getenv("SENTINELFLOW_PUBLIC_URL")
+		if publicURL == "" {
+			publicURL = "http://localhost:8081"
+		}
+		samlService, err := samlv3.New(samlv3.Config{
+			EntityID: os.Getenv("SAML_ENTITY_ID"), PublicURL: publicURL,
+			CertificateFile: os.Getenv("SAML_CERT_FILE"), PrivateKeyFile: os.Getenv("SAML_KEY_FILE"),
+			IDPMetadataFile: os.Getenv("SAML_IDP_METADATA_FILE"), IDPMetadataURL: os.Getenv("SAML_IDP_METADATA_URL"),
+		})
+		if err != nil {
+			log.Printf("⚠️  SAML disabled: %v", err)
+		} else {
+			samlHandler = samlv3.NewHandler(samlService, identitySvc)
+			log.Printf("✅ SAML 2.0 service provider configured")
+		}
+	}
+
 	// === SCIM handler ===
 	scimHandler := scimv3.NewHandler(identitySvc)
 	scimAuth := middleware.NewSCIMAuthMiddleware()
@@ -121,6 +142,10 @@ func main() {
 	// ============================================================
 	// PUBLIC ENDPOINTS
 	// ============================================================
+	if samlHandler != nil {
+		samlHandler.Register(r)
+	}
+
 	r.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
 		if err := pgClient.HealthCheck(req.Context()); err != nil {
 			w.WriteHeader(http.StatusServiceUnavailable)
@@ -302,6 +327,7 @@ func main() {
 		log.Printf("   Auth: %v", authEnabled)
 		log.Printf("   OIDC providers: %d", len(oidcMgr.ListProviders()))
 		log.Printf("   OIDC callback: real (token exchange + JWKS validation)")
+		log.Printf("   SAML: %v", samlHandler != nil)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("❌ Control Plane error: %v", err)
 		}
