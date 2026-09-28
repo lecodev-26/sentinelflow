@@ -14,6 +14,7 @@ const (
 	ScopeReadMetrics   Scope = "metrics:read"
 	ScopeReadAudit     Scope = "audit:read"
 	ScopeReadAnalytics Scope = "analytics:read"
+	ScopeReadApprovals Scope = "approvals:read"
 
 	// Scopes de escritura
 	ScopeWriteChat      Scope = "chat:write"
@@ -21,6 +22,7 @@ const (
 	ScopeWriteProviders Scope = "providers:write"
 	ScopeWriteUsers     Scope = "users:write"
 	ScopeWriteKeys      Scope = "keys:write"
+	ScopeWriteApprovals Scope = "approvals:write"
 
 	// Scopes de gestión
 	ScopeManageOrg     Scope = "org:manage"

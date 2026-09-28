@@ -148,6 +148,12 @@ const (
 
 	// Health
 	EventProviderHealthChanged = "provider.health_changed"
+
+	// Approval workflows
+	EventApprovalRequested = "approval.requested"
+	EventApprovalApproved  = "approval.approved"
+	EventApprovalRejected  = "approval.rejected"
+	EventApprovalCancelled = "approval.cancelled"
 )
 
 // WithProject establece el proyecto (multi-tenancy V4)

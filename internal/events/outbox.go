@@ -98,7 +98,7 @@ ON CONFLICT (event_id) DO NOTHING
 	_, err = tx.Exec(ctx, q,
 		ev.ID, ev.Type,
 		ev.TenantID, ev.ProjectID, ev.UserID, ev.RequestID, ev.TraceID,
-		payloadJSON,
+		string(payloadJSON),
 		ev.Timestamp,
 	)
 	if err != nil {

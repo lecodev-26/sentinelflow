@@ -12,9 +12,11 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/lecodev-26/sentinelflow/internal/approvals"
 	cpv3 "github.com/lecodev-26/sentinelflow/internal/controlplane/v3"
 	oidcv3 "github.com/lecodev-26/sentinelflow/internal/enterprise/v3/oidc"
 	scimv3 "github.com/lecodev-26/sentinelflow/internal/enterprise/v3/scim"
+	"github.com/lecodev-26/sentinelflow/internal/events"
 	"github.com/lecodev-26/sentinelflow/internal/gateway/v3/middleware"
 	"github.com/lecodev-26/sentinelflow/internal/identity"
 	"github.com/lecodev-26/sentinelflow/internal/logger"
@@ -59,6 +61,11 @@ func main() {
 
 	identitySvc := identity.NewService(pgClient)
 	log.Printf("✅ Identity service iniciado")
+
+	// Approval workflows use the same transactional outbox as the gateway.
+	// The worker publishes pending outbox events to the shared Redis bus.
+	approvalOutbox := events.NewOutbox(pgClient.Pool(), nil, events.DefaultOutboxConfig())
+	approvalSvc := approvals.NewService(pgClient.Pool(), approvalOutbox)
 
 	// === Auth middleware ===
 	authEnabled := os.Getenv("SENTINELFLOW_ENV") == "production"
@@ -266,6 +273,8 @@ func main() {
 	// ============================================================
 	handlers := cpv3.NewWithAuth(identitySvc, authMw)
 	handlers.Register(r)
+	approvalHandler := approvals.NewHandler(approvalSvc)
+	approvalHandler.Register(r, authMw)
 
 	// === Server ===
 	srv := &http.Server{

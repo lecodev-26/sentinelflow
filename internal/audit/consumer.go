@@ -13,7 +13,7 @@ type Consumer struct{ pool *pgxpool.Pool }
 
 func NewConsumer(pool *pgxpool.Pool) *Consumer { return &Consumer{pool: pool} }
 func (c *Consumer) Register(bus events.EventBus) error {
-	for _, t := range []string{events.EventAPIKeyCreated, events.EventAPIKeyRevoked, events.EventPolicyChanged, events.EventUserCreated, events.EventUserDeleted} {
+	for _, t := range []string{events.EventAPIKeyCreated, events.EventAPIKeyRevoked, events.EventPolicyChanged, events.EventUserCreated, events.EventUserDeleted, events.EventApprovalRequested, events.EventApprovalApproved, events.EventApprovalRejected, events.EventApprovalCancelled} {
 		if err := bus.Subscribe(t, events.NewConsumer("audit."+t, c.handle)); err != nil {
 			return err
 		}
@@ -53,6 +53,8 @@ func extractResource(ev events.Event) (string, string) {
 		return "policy", str(ev.Payload["policy_id"])
 	case events.EventUserCreated, events.EventUserDeleted:
 		return "user", str(ev.Payload["user_id"])
+	case events.EventApprovalRequested, events.EventApprovalApproved, events.EventApprovalRejected, events.EventApprovalCancelled:
+		return "approval", str(ev.Payload["approval_id"])
 	}
 	return "unknown", ""
 }
