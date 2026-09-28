@@ -43,6 +43,7 @@ type Engine struct {
 	scorer         *Scorer
 	experiments    *ExperimentManager
 	regionResolver *regionsv3.Resolver
+	multiRegion    *MultiRegionRouter
 }
 
 // NewEngine crea un nuevo engine
@@ -53,7 +54,13 @@ func NewEngine(modelRegistry *ModelRegistry, providerMgr *providers.Manager, wei
 		scorer:         NewScorer(weights),
 		experiments:    NewExperimentManager(),
 		regionResolver: regionsv3.NewResolver(),
+		multiRegion:    NewMultiRegionRouter(regionsv3.NewResolver()),
 	}
+}
+
+// SetProviderRegions registra los placements regionales del provider.
+func (e *Engine) SetProviderRegions(provider string, rs []regionsv3.Region) {
+	e.multiRegion.SetProviderRegions(provider, rs)
 }
 
 // Experiments devuelve el manager de experimentos
@@ -166,6 +173,14 @@ func (e *Engine) buildCandidates(
 			continue
 		}
 
+		// Filtro: placement multi-región. Si hay placement registrado, debe existir
+		// al menos una región compatible con la residencia solicitada.
+		placements := e.multiRegion.Eligible(p.ID(), residencyLevel)
+		if len(e.multiRegion.Regions(p.ID())) > 0 && len(placements) == 0 {
+			filteredByResidency++
+			continue
+		}
+
 		// Filtro: modelo disponible
 		model, ok := e.modelRegistry.Get(p.ID(), req.Model)
 		if !ok {
@@ -209,6 +224,12 @@ func (e *Engine) buildCandidates(
 			AvgLatency:    avgLatency,
 			CircuitState:  string(cb.State()),
 			EstimatedCost: estimated,
+			Region: func() string {
+				if len(placements) > 0 {
+					return string(placements[0])
+				}
+				return ""
+			}(),
 		})
 	}
 

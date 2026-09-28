@@ -44,6 +44,7 @@ type Candidate struct {
 	AvgLatency    time.Duration
 	CircuitState  string // "closed", "open", "half-open"
 	EstimatedCost CostEstimate
+	Region        string `json:"region,omitempty"`
 }
 
 // Score contiene el desglose de la puntuación
