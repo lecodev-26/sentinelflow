@@ -12,11 +12,23 @@
 
 </div>
 
+SentinelFlow is an **OpenAI-compatible AI gateway / LLM gateway** for teams running multiple model providers. It combines model routing, provider failover, policy enforcement, AI FinOps, security and observability in one open-source control layer.
+
 SentinelFlow sits between applications and AI providers and turns a collection of model APIs into a governed, observable and cost-aware platform.
 
 It provides one gateway for authentication, tenant isolation, policy enforcement, routing, provider failover, usage accounting, security controls, events, audit and operations.
 
 > **Project status:** V4 architecture and roadmap are implemented in the repository. Production deployment still requires environment-specific PostgreSQL/Redis, provider credentials, identity configuration and operational verification. See [production readiness](docs/v4/production-readiness.md).
+
+## What can you build with it?
+
+- **LLM gateway:** expose one stable API while changing providers behind it.
+- **AI model router:** select models using capability, cost, latency, region and policy constraints.
+- **Multi-provider failover:** keep requests resilient when an eligible provider becomes unavailable.
+- **AI FinOps platform:** track token usage and cost, enforce budgets and make routing cost-aware.
+- **Enterprise AI control plane:** manage organizations, projects, environments, policies, identity and audit.
+- **LLM security layer:** inspect requests for PII, secrets, prompt-security signals and anomalous traffic.
+- **AI observability:** measure provider latency, availability, traces, events and error budgets.
 
 ## Why SentinelFlow?
 
