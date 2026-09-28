@@ -15,11 +15,13 @@ import (
 	"github.com/lecodev-26/sentinelflow/internal/approvals"
 	cpv3 "github.com/lecodev-26/sentinelflow/internal/controlplane/v3"
 	oidcv3 "github.com/lecodev-26/sentinelflow/internal/enterprise/v3/oidc"
+	regionsv3 "github.com/lecodev-26/sentinelflow/internal/enterprise/v3/regions"
 	scimv3 "github.com/lecodev-26/sentinelflow/internal/enterprise/v3/scim"
 	"github.com/lecodev-26/sentinelflow/internal/events"
 	"github.com/lecodev-26/sentinelflow/internal/gateway/v3/middleware"
 	"github.com/lecodev-26/sentinelflow/internal/identity"
 	"github.com/lecodev-26/sentinelflow/internal/logger"
+	"github.com/lecodev-26/sentinelflow/internal/rbac"
 	"github.com/lecodev-26/sentinelflow/internal/storage/postgres"
 	"github.com/lecodev-26/sentinelflow/internal/version"
 )
@@ -66,6 +68,7 @@ func main() {
 	// The worker publishes pending outbox events to the shared Redis bus.
 	approvalOutbox := events.NewOutbox(pgClient.Pool(), nil, events.DefaultOutboxConfig())
 	approvalSvc := approvals.NewService(pgClient.Pool(), approvalOutbox)
+	regionResolver := regionsv3.NewResolver()
 
 	// === Auth middleware ===
 	authEnabled := os.Getenv("SENTINELFLOW_ENV") == "production"
@@ -267,6 +270,12 @@ func main() {
 		scimRouter.Use(scimAuth.Handler)
 	}
 	scimHandler.Register(scimRouter)
+
+	// === Regions / data residency catalog ===
+	r.Handle("/v1/regions", authMw.Handler(middleware.RequireScope(rbac.ScopeReadRegions)(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"regions": regionResolver.List()})
+	})))).Methods("GET")
 
 	// ============================================================
 	// CONTROL PLANE V3 (auth + scopes)
