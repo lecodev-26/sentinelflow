@@ -1,0 +1,55 @@
+name: SentinelFlow V4 CI
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+permissions:
+  contents: read
+  id-token: write
+  packages: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test ./...
+      - run: go vet ./...
+      - run: test -z "$(gofmt -l .)"
+      - run: go build ./cmd/gateway ./cmd/controlplane ./cmd/worker ./cmd/cli ./cmd/migrator
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go mod verify
+      - uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+      - uses: anchore/sbom-action@v0
+        with:
+          path: .
+          artifact-name: sentinelflow-sbom.spdx.json
+  container:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: sentinelflow:ci
+      - uses: sigstore/cosign-installer@v3.8.1
+      - run: cosign sign --yes --annotations=repo=${{ github.repository }} sentinelflow:ci
+        if: startsWith(github.ref, 'refs/tags/')
