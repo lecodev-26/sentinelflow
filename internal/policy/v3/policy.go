@@ -64,6 +64,9 @@ type RoutingPolicy struct {
 	RequiredCapabilities []string `json:"required_capabilities,omitempty"`
 	MaxCostPer1M         float64  `json:"max_cost_per_1m,omitempty"`
 	PreferredProvider    string   `json:"preferred_provider,omitempty"`
+	AllowedTools         []string `json:"allowed_tools,omitempty"`
+	DeniedTools          []string `json:"denied_tools,omitempty"`
+	ApprovalTools        []string `json:"approval_tools,omitempty"`
 }
 
 // SecurityPolicy define las reglas de seguridad

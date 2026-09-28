@@ -15,6 +15,7 @@ import (
 	"github.com/gorilla/mux"
 	accountingv3 "github.com/lecodev-26/sentinelflow/internal/accounting/v3"
 	"github.com/lecodev-26/sentinelflow/internal/events"
+	gatewayv3 "github.com/lecodev-26/sentinelflow/internal/gateway/v3"
 	"github.com/lecodev-26/sentinelflow/internal/gateway/v3/executor"
 	"github.com/lecodev-26/sentinelflow/internal/gateway/v3/middleware"
 	"github.com/lecodev-26/sentinelflow/internal/gateway/v3/normalizer"
@@ -153,6 +154,7 @@ func main() {
 	normalizerSvc := normalizer.New()
 	anomalyDetector := securityv3.NewAnomalyDetector(time.Minute, 60, 1000)
 	anomalyMw := middleware.NewAnomalyMiddleware(anomalyDetector)
+	toolGateway := gatewayv3.NewToolGateway()
 
 	// === Router ===
 	r := mux.NewRouter()
@@ -403,6 +405,25 @@ func main() {
 		}
 
 		tenantID := middleware.GetTenantID(req.Context())
+		if len(normReq.Tools) > 0 {
+			toolDefs := make([]gatewayv3.ToolDefinition, 0, len(normReq.Tools))
+			for _, t := range normReq.Tools {
+				name, _ := t.Function["name"].(string)
+				desc, _ := t.Function["description"].(string)
+				schema, _ := t.Function["parameters"].(map[string]interface{})
+				toolDefs = append(toolDefs, gatewayv3.ToolDefinition{Name: name, Description: desc, InputSchema: schema})
+			}
+			var tp gatewayv3.RequestToolPolicy
+			if pr, ok := middleware.GetPolicyResult(req.Context()); ok && pr.Routing != nil {
+				tp.Allowed = pr.Routing.AllowedTools
+				tp.Denied = pr.Routing.DeniedTools
+				tp.RequireApproval = pr.Routing.ApprovalTools
+			}
+			if _, err := toolGateway.AuthorizeDefinitions(toolDefs, tp); err != nil {
+				writeError(w, http.StatusForbidden, "tool_denied", err.Error())
+				return
+			}
+		}
 		userID := middleware.GetUserID(req.Context())
 		apiKeyID := middleware.GetAPIKeyID(req.Context())
 
