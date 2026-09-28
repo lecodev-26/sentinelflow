@@ -202,6 +202,9 @@ func main() {
 	// PROTECTED ENDPOINTS (auth + optional scope)
 	// ============================================================
 
+	// --- Developer Portal ---
+	r.HandleFunc("/developer", func(w http.ResponseWriter, req *http.Request) { http.ServeFile(w, req, "web/developer/index.html") }).Methods("GET")
+
 	// --- /v1/providers ---
 	r.Handle("/v1/providers",
 		authMw.Handler(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
