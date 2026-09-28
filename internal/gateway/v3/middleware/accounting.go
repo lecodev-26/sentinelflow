@@ -48,6 +48,7 @@ func (m *AccountingMiddleware) Handler(next http.Handler) http.Handler {
 		tenantID := getTenantFromCtx(r.Context())
 		userID := getUserFromCtx(r.Context())
 		apiKeyID := getAPIKeyFromCtx(r.Context())
+		environment := GetEnvironment(r.Context())
 
 		providerID := recorder.Header().Get("X-Provider")
 		requestID := r.Header.Get("X-Request-Id")
@@ -86,6 +87,7 @@ func (m *AccountingMiddleware) Handler(next http.Handler) http.Handler {
 			TenantID:     tenantID,
 			UserID:       userID,
 			APIKeyID:     apiKeyID,
+			Environment:  environment,
 			Provider:     providerID,
 			Model:        model,
 			InputTokens:  inputTokens,

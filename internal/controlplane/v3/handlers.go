@@ -250,10 +250,11 @@ func (h *Handlers) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	userID := mux.Vars(r)["id"]
 
 	var req struct {
-		Name      string   `json:"name"`
-		ProjectID string   `json:"project_id"`
-		Scopes    []string `json:"scopes"`
-		TTLHours  int      `json:"ttl_hours"`
+		Name        string   `json:"name"`
+		Environment string   `json:"environment"`
+		ProjectID   string   `json:"project_id"`
+		Scopes      []string `json:"scopes"`
+		TTLHours    int      `json:"ttl_hours"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", "invalid JSON")
@@ -265,7 +266,7 @@ func (h *Handlers) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		ttl = 365 * 24 * time.Hour
 	}
 
-	rawKey, key, err := h.svc.CreateAPIKey(r.Context(), userID, req.ProjectID, req.Name, req.Scopes, ttl)
+	rawKey, key, err := h.svc.CreateAPIKey(r.Context(), userID, req.ProjectID, req.Environment, req.Name, req.Scopes, ttl)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return

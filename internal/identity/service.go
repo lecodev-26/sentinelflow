@@ -181,7 +181,7 @@ func (s *Service) DeleteUser(ctx context.Context, id string) error {
 // === API KEYS ===
 
 // CreateAPIKey crea una API key para un usuario
-func (s *Service) CreateAPIKey(ctx context.Context, userID, projectID, name string, scopes []string, ttl time.Duration) (string, *postgres.APIKey, error) {
+func (s *Service) CreateAPIKey(ctx context.Context, userID, projectID, environment, name string, scopes []string, ttl time.Duration) (string, *postgres.APIKey, error) {
 	if userID == "" {
 		return "", nil, errors.New("user_id is required")
 	}
@@ -194,6 +194,10 @@ func (s *Service) CreateAPIKey(ctx context.Context, userID, projectID, name stri
 		return "", nil, errors.New("user is inactive")
 	}
 
+	if !isValidEnvironment(environment) {
+		return "", nil, fmt.Errorf("invalid environment: %s", environment)
+	}
+
 	if projectID != "" {
 		if _, err := s.projects.GetByID(ctx, projectID); err != nil {
 			return "", nil, errors.New("project not found")
@@ -204,7 +208,7 @@ func (s *Service) CreateAPIKey(ctx context.Context, userID, projectID, name stri
 		name = "default-key"
 	}
 
-	return s.keys.Create(ctx, userID, user.OrgID, projectID, name, scopes, ttl)
+	return s.keys.Create(ctx, userID, user.OrgID, projectID, environment, name, scopes, ttl)
 }
 
 // ValidateAPIKey valida una key en claro
@@ -236,6 +240,17 @@ func (s *Service) RevokeAPIKey(ctx context.Context, id string) error {
 }
 
 // === HELPERS ===
+
+func isValidEnvironment(environment string) bool {
+	if environment == "" {
+		return true
+	}
+	switch environment {
+	case "development", "staging", "production":
+		return true
+	}
+	return false
+}
 
 func isValidRole(role string) bool {
 	switch role {

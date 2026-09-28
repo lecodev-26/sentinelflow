@@ -14,13 +14,14 @@ import (
 type contextKey string
 
 const (
-	CtxTenantID  contextKey = "tenant_id"
-	CtxOrgID     contextKey = "org_id"
-	CtxProjectID contextKey = "project_id"
-	CtxUserID    contextKey = "user_id"
-	CtxAPIKeyID  contextKey = "api_key_id"
-	CtxScopes    contextKey = "scopes"
-	CtxResidency contextKey = "residency"
+	CtxTenantID    contextKey = "tenant_id"
+	CtxOrgID       contextKey = "org_id"
+	CtxProjectID   contextKey = "project_id"
+	CtxUserID      contextKey = "user_id"
+	CtxAPIKeyID    contextKey = "api_key_id"
+	CtxScopes      contextKey = "scopes"
+	CtxResidency   contextKey = "residency"
+	CtxEnvironment contextKey = "environment"
 )
 
 // Auth valida API keys contra PostgreSQL
@@ -50,6 +51,7 @@ func (a *Auth) Handler(next http.Handler) http.Handler {
 			ctx = context.WithValue(ctx, CtxOrgID, "default")
 			ctx = context.WithValue(ctx, CtxUserID, "anonymous")
 			ctx = context.WithValue(ctx, CtxResidency, "global")
+			ctx = context.WithValue(ctx, CtxEnvironment, "development")
 			ctx = context.WithValue(ctx, CtxScopes, []string{"*"})
 			next.ServeHTTP(w, r.WithContext(ctx))
 			return
@@ -97,6 +99,7 @@ func (a *Auth) Handler(next http.Handler) http.Handler {
 		ctx = context.WithValue(ctx, CtxAPIKeyID, apiKey.ID)
 		ctx = context.WithValue(ctx, CtxScopes, apiKey.Scopes)
 		ctx = context.WithValue(ctx, CtxResidency, residency)
+		ctx = context.WithValue(ctx, CtxEnvironment, apiKey.Environment)
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -154,6 +157,14 @@ func GetAPIKeyID(ctx context.Context) string {
 		return v
 	}
 	return ""
+}
+
+// GetEnvironment devuelve el entorno de la API key autenticada
+func GetEnvironment(ctx context.Context) string {
+	if v, ok := ctx.Value(CtxEnvironment).(string); ok && v != "" {
+		return v
+	}
+	return "production"
 }
 
 // GetResidency devuelve la residencia del contexto

@@ -31,6 +31,7 @@ import (
 type Entry struct {
 	Action       string
 	TenantID     string
+	Environment  string
 	ProjectID    string
 	ActorID      string
 	ActorEmail   string
@@ -69,6 +70,7 @@ func Log(ctx context.Context, tx pgx.Tx, outbox *events.Outbox, e Entry) error {
 
 	ev := events.NewEvent(e.Action).
 		WithTenant(e.TenantID).
+		WithPayload("environment", e.Environment).
 		WithProject(e.ProjectID).
 		WithUser(e.ActorID).
 		WithRequest(e.RequestID).

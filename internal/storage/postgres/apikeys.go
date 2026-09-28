@@ -21,6 +21,7 @@ type APIKey struct {
 	UserID      string    `json:"user_id"`
 	OrgID       string    `json:"org_id"`
 	ProjectID   string    `json:"project_id"`
+	Environment string    `json:"environment"`
 	Scopes      []string  `json:"scopes"`
 	Active      bool      `json:"active"`
 	CreatedAt   time.Time `json:"created_at"`
@@ -40,13 +41,16 @@ func (c *Client) APIKeys() *APIKeyRepo {
 }
 
 // Create crea una nueva API key. Devuelve la key en claro UNA SOLA VEZ.
-func (r *APIKeyRepo) Create(ctx context.Context, userID, orgID, projectID, name string, scopes []string, ttl time.Duration) (string, *APIKey, error) {
+func (r *APIKeyRepo) Create(ctx context.Context, userID, orgID, projectID, environment, name string, scopes []string, ttl time.Duration) (string, *APIKey, error) {
 	rawKey := generateRawKey()
 	hash := hashKey(rawKey)
 	prefix := rawKey[:11]
 
 	if ttl == 0 {
 		ttl = 365 * 24 * time.Hour
+	}
+	if environment == "" {
+		environment = "production"
 	}
 
 	if len(scopes) == 0 {
@@ -56,26 +60,27 @@ func (r *APIKeyRepo) Create(ctx context.Context, userID, orgID, projectID, name 
 	scopesJSON, _ := json.Marshal(scopes)
 
 	key := &APIKey{
-		ID:        generateID("key"),
-		KeyHash:   hash,
-		KeyPrefix: prefix,
-		Name:      name,
-		UserID:    userID,
-		OrgID:     orgID,
-		ProjectID: projectID,
-		Scopes:    scopes,
-		Active:    true,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-		LastUsed:  time.Now(),
-		ExpiresAt: time.Now().Add(ttl),
+		ID:          generateID("key"),
+		KeyHash:     hash,
+		KeyPrefix:   prefix,
+		Name:        name,
+		UserID:      userID,
+		OrgID:       orgID,
+		ProjectID:   projectID,
+		Environment: environment,
+		Scopes:      scopes,
+		Active:      true,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+		LastUsed:    time.Now(),
+		ExpiresAt:   time.Now().Add(ttl),
 	}
 
 	_, err := r.client.Exec(ctx, `
-INSERT INTO api_keys (id, key_hash, key_prefix, name, user_id, org_id, project_id,
+INSERT INTO api_keys (id, key_hash, key_prefix, name, user_id, org_id, project_id, environment,
 scopes, active, created_at, updated_at, last_used, expires_at, rotated_from)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
-		key.ID, key.KeyHash, key.KeyPrefix, key.Name, key.UserID, key.OrgID, key.ProjectID,
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+		key.ID, key.KeyHash, key.KeyPrefix, key.Name, key.UserID, key.OrgID, key.ProjectID, key.Environment,
 		scopesJSON, key.Active, key.CreatedAt, key.UpdatedAt, key.LastUsed, key.ExpiresAt, "")
 	if err != nil {
 		return "", nil, err
@@ -87,7 +92,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
 // GetByHash devuelve una API key por hash
 func (r *APIKeyRepo) GetByHash(ctx context.Context, hash string) (*APIKey, error) {
 	row := r.client.QueryRow(ctx, `
-SELECT id, key_hash, key_prefix, name, user_id, org_id, project_id,
+SELECT id, key_hash, key_prefix, name, user_id, org_id, project_id, environment,
 scopes, active, created_at, updated_at, last_used, expires_at, COALESCE(rotated_from, '')
 FROM api_keys WHERE key_hash = $1`, hash)
 
@@ -97,7 +102,7 @@ FROM api_keys WHERE key_hash = $1`, hash)
 // GetByID devuelve una API key por ID
 func (r *APIKeyRepo) GetByID(ctx context.Context, id string) (*APIKey, error) {
 	row := r.client.QueryRow(ctx, `
-SELECT id, key_hash, key_prefix, name, user_id, org_id, project_id,
+SELECT id, key_hash, key_prefix, name, user_id, org_id, project_id, environment,
 scopes, active, created_at, updated_at, last_used, expires_at, COALESCE(rotated_from, '')
 FROM api_keys WHERE id = $1`, id)
 
@@ -107,7 +112,7 @@ FROM api_keys WHERE id = $1`, id)
 // ListByUser lista las API keys de un usuario
 func (r *APIKeyRepo) ListByUser(ctx context.Context, userID string) ([]*APIKey, error) {
 	rows, err := r.client.Query(ctx, `
-SELECT id, key_hash, key_prefix, name, user_id, org_id, project_id,
+SELECT id, key_hash, key_prefix, name, user_id, org_id, project_id, environment,
 scopes, active, created_at, updated_at, last_used, expires_at, COALESCE(rotated_from, '')
 FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC`, userID)
 	if err != nil {
@@ -207,7 +212,7 @@ func scanAPIKey(row pgx.Row) (*APIKey, error) {
 	var rotatedFrom string
 
 	err := row.Scan(&k.ID, &k.KeyHash, &k.KeyPrefix, &k.Name, &k.UserID, &k.OrgID,
-		&k.ProjectID, &scopesJSON, &k.Active, &k.CreatedAt, &k.UpdatedAt,
+		&k.ProjectID, &k.Environment, &scopesJSON, &k.Active, &k.CreatedAt, &k.UpdatedAt,
 		&k.LastUsed, &k.ExpiresAt, &rotatedFrom)
 	if err == sql.ErrNoRows || err == pgx.ErrNoRows {
 		return nil, ErrNotFound
@@ -230,7 +235,7 @@ func scanAPIKeyFromRows(rows pgx.Rows) (*APIKey, error) {
 	var rotatedFrom string
 
 	err := rows.Scan(&k.ID, &k.KeyHash, &k.KeyPrefix, &k.Name, &k.UserID, &k.OrgID,
-		&k.ProjectID, &scopesJSON, &k.Active, &k.CreatedAt, &k.UpdatedAt,
+		&k.ProjectID, &k.Environment, &scopesJSON, &k.Active, &k.CreatedAt, &k.UpdatedAt,
 		&k.LastUsed, &k.ExpiresAt, &rotatedFrom)
 	if err != nil {
 		return nil, err

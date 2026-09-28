@@ -293,7 +293,7 @@ func main() {
 					if l := req.URL.Query().Get("limit"); l != "" {
 						fmt.Sscanf(l, "%d", &limit)
 					}
-					entries, err := pgClient.Audit().ListByTenant(req.Context(), tenantID, limit)
+					entries, err := pgClient.Audit().ListByTenant(req.Context(), tenantID, middleware.GetEnvironment(req.Context()), limit)
 					if err != nil {
 						writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 						return
@@ -318,7 +318,7 @@ func main() {
 					if d := req.URL.Query().Get("days"); d != "" {
 						fmt.Sscanf(d, "%d", &days)
 					}
-					rows, err := pgClient.Analytics().ListByTenant(req.Context(), tenantID, days)
+					rows, err := pgClient.Analytics().ListByTenant(req.Context(), tenantID, middleware.GetEnvironment(req.Context()), days)
 					if err != nil {
 						writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 						return
@@ -345,7 +345,7 @@ func main() {
 						fmt.Sscanf(l, "%d", &limit)
 					}
 					kind := req.URL.Query().Get("kind")
-					events, err := pgClient.Security().ListByTenant(req.Context(), tenantID, limit, kind)
+					events, err := pgClient.Security().ListByTenant(req.Context(), tenantID, middleware.GetEnvironment(req.Context()), limit, kind)
 					if err != nil {
 						writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 						return

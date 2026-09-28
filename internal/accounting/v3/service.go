@@ -103,6 +103,7 @@ func (s *Service) recordWithOutbox(ctx context.Context, rec *postgres.UsageRecor
 			WithTenant(rec.TenantID).
 			WithProject(rec.ProjectID).
 			WithUser(rec.UserID).
+			WithPayload("environment", rec.Environment).
 			WithRequest(rec.RequestID).
 			WithPayload("usage_id", rec.ID).
 			WithPayload("provider", rec.Provider).

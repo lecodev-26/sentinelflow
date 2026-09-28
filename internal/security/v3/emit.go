@@ -39,7 +39,7 @@ type EmitFinding struct {
 
 // Emit publica todos los findings en una sola TX.
 // Si findings está vacío, no hace nada.
-func (e *Emitter) Emit(ctx context.Context, tenantID, projectID, userID, requestID, traceID string, findings []EmitFinding) error {
+func (e *Emitter) Emit(ctx context.Context, tenantID, environment, projectID, userID, requestID, traceID string, findings []EmitFinding) error {
 	if len(findings) == 0 {
 		return nil
 	}
@@ -56,6 +56,7 @@ func (e *Emitter) Emit(ctx context.Context, tenantID, projectID, userID, request
 		}
 		ev := events.NewEvent(evType).
 			WithTenant(tenantID).
+			WithPayload("environment", environment).
 			WithProject(projectID).
 			WithUser(userID).
 			WithRequest(requestID).

@@ -155,7 +155,7 @@ func (m *PolicyMiddleware) Handler(next http.Handler) http.Handler {
 					Action:   string(securityDecision.Action),
 				})
 			}
-			_ = m.emitter.Emit(r.Context(), tenantID, "", "", r.Header.Get("X-Request-Id"), "", findings)
+			_ = m.emitter.Emit(r.Context(), tenantID, GetEnvironment(r.Context()), "", "", r.Header.Get("X-Request-Id"), "", findings)
 		}
 
 		// Si bloqueado, devolver error

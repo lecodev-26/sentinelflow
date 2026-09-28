@@ -15,6 +15,7 @@ type UsageRecord struct {
 	ProjectID     string    `json:"project_id,omitempty"`
 	UserID        string    `json:"user_id,omitempty"`
 	APIKeyID      string    `json:"api_key_id,omitempty"`
+	Environment   string    `json:"environment,omitempty"`
 	Provider      string    `json:"provider"`
 	Model         string    `json:"model"`
 	InputTokens   int       `json:"input_tokens"`
@@ -50,12 +51,12 @@ func (r *UsageRepo) Create(ctx context.Context, rec *UsageRecord) error {
 
 	_, err := r.client.Exec(ctx, `
 INSERT INTO usage_records (
-id, request_id, tenant_id, project_id, user_id, api_key_id,
+id, request_id, tenant_id, project_id, user_id, api_key_id, environment,
 provider, model, input_tokens, output_tokens, total_tokens,
 input_cost_usd, output_cost_usd, cost_usd, latency_ms, ttft_ms,
 status, cache_hit, fallback, timestamp
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
-		rec.ID, rec.RequestID, rec.TenantID, rec.ProjectID, rec.UserID, rec.APIKeyID,
+		rec.ID, rec.RequestID, rec.TenantID, rec.ProjectID, rec.UserID, rec.APIKeyID, rec.Environment,
 		rec.Provider, rec.Model, rec.InputTokens, rec.OutputTokens, rec.TotalTokens,
 		rec.InputCostUSD, rec.OutputCostUSD, rec.CostUSD, rec.LatencyMs, rec.TTFTMs,
 		rec.Status, rec.CacheHit, rec.Fallback, rec.Timestamp)
@@ -161,12 +162,12 @@ func (r *UsageRepo) CreateTx(ctx context.Context, tx pgx.Tx, rec *UsageRecord) e
 
 	_, err := tx.Exec(ctx, `
 INSERT INTO usage_records (
-id, request_id, tenant_id, project_id, user_id, api_key_id,
+id, request_id, tenant_id, project_id, user_id, api_key_id, environment,
 provider, model, input_tokens, output_tokens, total_tokens,
 input_cost_usd, output_cost_usd, cost_usd, latency_ms, ttft_ms,
 status, cache_hit, fallback, timestamp
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
-		rec.ID, rec.RequestID, rec.TenantID, rec.ProjectID, rec.UserID, rec.APIKeyID,
+		rec.ID, rec.RequestID, rec.TenantID, rec.ProjectID, rec.UserID, rec.APIKeyID, rec.Environment,
 		rec.Provider, rec.Model, rec.InputTokens, rec.OutputTokens, rec.TotalTokens,
 		rec.InputCostUSD, rec.OutputCostUSD, rec.CostUSD, rec.LatencyMs, rec.TTFTMs,
 		rec.Status, rec.CacheHit, rec.Fallback, rec.Timestamp)
