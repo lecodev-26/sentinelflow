@@ -102,6 +102,7 @@ func (e *Executor) ExecuteChat(
 		latency := time.Since(start)
 
 		if err == nil {
+			e.manager.SLOMonitor().Record(provider.ID(), latency, true)
 			cb.RecordSuccess()
 			attempts = append(attempts, AttemptResult{
 				ProviderID:   provider.ID(),
@@ -114,6 +115,7 @@ func (e *Executor) ExecuteChat(
 			return resp, attempts, nil
 		}
 
+		e.manager.SLOMonitor().Record(provider.ID(), latency, false)
 		cb.RecordFailure()
 		attempts = append(attempts, AttemptResult{
 			ProviderID:   provider.ID(),
@@ -178,6 +180,7 @@ func (e *Executor) ExecuteStream(
 		latency := time.Since(start)
 
 		if err != nil {
+			e.manager.SLOMonitor().Record(provider.ID(), latency, false)
 			cb.RecordFailure()
 			attempts = append(attempts, AttemptResult{
 				ProviderID:   provider.ID(),
@@ -189,6 +192,7 @@ func (e *Executor) ExecuteStream(
 			continue
 		}
 
+		e.manager.SLOMonitor().Record(provider.ID(), latency, true)
 		cb.RecordSuccess()
 		attempts = append(attempts, AttemptResult{
 			ProviderID:   provider.ID(),

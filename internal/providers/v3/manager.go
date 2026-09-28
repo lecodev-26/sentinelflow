@@ -19,6 +19,7 @@ type ManagedProvider struct {
 type Manager struct {
 	registry        *Registry
 	healthMonitor   *HealthMonitor
+	sloMonitor      *SLOMonitor
 	circuitBreakers map[string]*CircuitBreaker
 	mu              sync.RWMutex
 }
@@ -32,6 +33,10 @@ func NewManager(registry *Registry) *Manager {
 
 	// Crear health monitor
 	m.healthMonitor = NewHealthMonitor(registry, 30*time.Second, 5*time.Second)
+	m.sloMonitor = NewSLOMonitor()
+	for _, p := range registry.GetAll() {
+		m.sloMonitor.SetTarget(p.ID(), SLOTarget{})
+	}
 
 	// Crear circuit breakers para todos los providers
 	for _, p := range registry.GetAll() {
@@ -156,3 +161,9 @@ func (m *Manager) CircuitBreakerStatus() map[string]string {
 func (m *Manager) HealthMonitor() *HealthMonitor {
 	return m.healthMonitor
 }
+
+// SLOMonitor devuelve el monitor de SLO operativo.
+func (m *Manager) SLOMonitor() *SLOMonitor { return m.sloMonitor }
+
+// SLOStatus devuelve el estado SLO de todos los providers.
+func (m *Manager) SLOStatus() []ProviderSLO { return m.sloMonitor.All() }
