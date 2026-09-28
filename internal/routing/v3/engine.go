@@ -17,6 +17,9 @@ type Request struct {
 	RequiredCapabilities []string
 	MinContextSize       int
 	MaxCost              float64
+	InputTokens          int
+	OutputTokens         int
+	CostPolicy           CostPolicy
 	PreferredProvider    string
 	ExcludedProviders    []string
 	Residency            string // global, eu, us, apac
@@ -180,12 +183,13 @@ func (e *Engine) buildCandidates(
 			continue
 		}
 
-		// Filtro: coste máximo
-		if req.MaxCost > 0 {
-			cost := model.InputPer1M + model.OutputPer1M
-			if cost > req.MaxCost {
-				continue
-			}
+		// Filtro: coste máximo por precio de catálogo y coste estimado.
+		if req.MaxCost > 0 && model.InputPer1M+model.OutputPer1M > req.MaxCost {
+			continue
+		}
+		estimated := EstimateCost(model, req.InputTokens, req.OutputTokens)
+		if !req.CostPolicy.Allows(estimated) {
+			continue
 		}
 
 		// Obtener health + circuit breaker
@@ -198,12 +202,13 @@ func (e *Engine) buildCandidates(
 		cb := e.providerMgr.GetBreaker(p.ID())
 
 		candidates = append(candidates, Candidate{
-			ProviderID:   p.ID(),
-			ProviderName: p.Name(),
-			Model:        model,
-			HealthStatus: health,
-			AvgLatency:   avgLatency,
-			CircuitState: string(cb.State()),
+			ProviderID:    p.ID(),
+			ProviderName:  p.Name(),
+			Model:         model,
+			HealthStatus:  health,
+			AvgLatency:    avgLatency,
+			CircuitState:  string(cb.State()),
+			EstimatedCost: estimated,
 		})
 	}
 

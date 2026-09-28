@@ -37,12 +37,13 @@ func (w *Weights) Normalize() {
 
 // Candidate representa un candidato a ser seleccionado
 type Candidate struct {
-	ProviderID   string
-	ProviderName string
-	Model        *ModelInfo
-	HealthStatus string // "healthy", "degraded", "unhealthy"
-	AvgLatency   time.Duration
-	CircuitState string // "closed", "open", "half-open"
+	ProviderID    string
+	ProviderName  string
+	Model         *ModelInfo
+	HealthStatus  string // "healthy", "degraded", "unhealthy"
+	AvgLatency    time.Duration
+	CircuitState  string // "closed", "open", "half-open"
+	EstimatedCost CostEstimate
 }
 
 // Score contiene el desglose de la puntuación
