@@ -2,7 +2,7 @@
 set -euo pipefail
 BACKUP_FILE="${1:-}"
 DATABASE_URL="${SENTINELFLOW_DATABASE_URL:-}"
-[ -n "$BACKUP_FILE" ] || { echo "usage: restore-v37.sh <backup.sql.gz>" >&2; exit 2; }
+[ -n "$BACKUP_FILE" ] || { echo "usage: restore.sh <backup.sql.gz>" >&2; exit 2; }
 [ -n "$DATABASE_URL" ] || { echo "SENTINELFLOW_DATABASE_URL not set" >&2; exit 1; }
 [ -f "$BACKUP_FILE" ] || { echo "backup not found: $BACKUP_FILE" >&2; exit 1; }
 command -v psql >/dev/null || { echo "psql is required" >&2; exit 1; }

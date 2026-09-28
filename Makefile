@@ -79,16 +79,16 @@ clean:
 	go clean
 
 docker-build-gateway:
-	docker build --build-arg SERVICE=gateway -t sentinelflow-gateway:3.0.0 .
+	docker build --build-arg SERVICE=gateway -t sentinelflow-gateway:4.0.0 .
 
 docker-build-controlplane:
-	docker build --build-arg SERVICE=controlplane -t sentinelflow-controlplane:3.0.0 .
+	docker build --build-arg SERVICE=controlplane -t sentinelflow-controlplane:4.0.0 .
 
 docker-build-worker:
-	docker build --build-arg SERVICE=worker -t sentinelflow-worker:3.0.0 .
+	docker build --build-arg SERVICE=worker -t sentinelflow-worker:4.0.0 .
 
 backup:
-	./scripts/backup-supabase.sh
+	./scripts/backup.sh
 
 dr-test:
 	./scripts/dr-test.sh

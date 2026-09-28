@@ -242,10 +242,6 @@ func (h *Handler) handleGroups(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{"schemas": []string{"urn:ietf:params:scim:api:messages:2.0:ListResponse"}, "totalResults": len(res), "Resources": res})
 		return
 	}
-	var in struct {
-		DisplayName, ExternalID, OrgID string `json:"displayName"`
-	}
-	_ = in
 	var body struct {
 		DisplayName string `json:"displayName"`
 		ExternalID  string `json:"externalId"`

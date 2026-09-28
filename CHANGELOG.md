@@ -1,3 +1,16 @@
+## [4.0.0] - 2026-09-28
+
+### Added
+- V4 foundation, distributed runtime, policy lifecycle, routing, FinOps, observability and enterprise contracts.
+- Developer portal/playground and Go/Python SDKs.
+- Docker Compose, Helm, Terraform, SBOM/security CI and production-readiness documentation.
+
+### Changed
+- V4 uses explicit PostgreSQL migrations and removes the legacy rules.yaml/SQLite configuration path.
+- Repository documentation and community health files were refreshed for open-source contributors.
+
+---
+
 # Changelog
 
 ## [3.0.0] - 2026-09-22

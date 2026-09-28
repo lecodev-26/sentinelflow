@@ -1,229 +1,212 @@
+# SentinelFlow
+
 <div align="center">
 
-#  SentinelFlow
-<p align="center">
-  <img src="./sentinelflow_transparent.png" width="120" alt="SentinelFlow" />
-</p>
+**Production-oriented AI Gateway, intelligent router, policy engine and control plane for multi-provider LLM infrastructure.**
 
-
-**AI Gateway & Control Plane para aplicaciones multi-LLM**
-
-[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=for-the-badge&logo=go)](https://go.dev/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge)](http://makeapullrequest.com)
-[![Stars](https://img.shields.io/github/stars/lecodev-26/sentinelflow?style=for-the-badge&color=gold)](https://github.com/lecodev-26/sentinelflow/stargazers)
+[![Go](https://img.shields.io/badge/Go-1.27+-00ADD8?logo=go)](https://go.dev/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![CI](https://github.com/lecodev-26/sentinelflow/actions/workflows/v4-ci.yml/badge.svg)](https://github.com/lecodev-26/sentinelflow/actions/workflows/v4-ci.yml)
+[![Open Issues](https://img.shields.io/github/issues/lecodev-26/sentinelflow)](https://github.com/lecodev-26/sentinelflow/issues)
+[![Stars](https://img.shields.io/github/stars/lecodev-26/sentinelflow)](https://github.com/lecodev-26/sentinelflow/stargazers)
 
 </div>
 
----
+SentinelFlow sits between applications and AI providers and turns a collection of model APIs into a governed, observable and cost-aware platform.
 
-## 📖 ¿Qué es SentinelFlow?
+It provides one gateway for authentication, tenant isolation, policy enforcement, routing, provider failover, usage accounting, security controls, events, audit and operations.
 
-**SentinelFlow** es un **AI Gateway** que actúa como capa de control para aplicaciones que consumen LLMs. Pones SentinelFlow entre tu aplicación y los proveedores de IA (OpenAI, Anthropic, Llama, etc.) y él decide a qué proveedor enviar cada petición, hace failover si uno falla, aplica rate limiting, cachea respuestas y expone métricas en tiempo real.
+> **Project status:** V4 architecture and roadmap are implemented in the repository. Production deployment still requires environment-specific PostgreSQL/Redis, provider credentials, identity configuration and operational verification. See [production readiness](docs/v4/production-readiness.md).
 
-### 🎯 ¿Por qué lo necesitas?
+## Why SentinelFlow?
 
-| Problema | Solución |
-|----------|----------|
-| 🔴 **OpenAI falló** | ✅ SentinelFlow cambia automáticamente a Anthropic |
-| 🔴 **Anthropic está lento** | ✅ SentinelFlow usa Local Llama |
-| 🔴 **Muchas peticiones** | ✅ SentinelFlow cachea respuestas y ahorra dinero |
-| 🔴 **Costes descontrolados** | ✅ SentinelFlow trackea costes y aplica budgets |
-| 🔴 **Fugas de datos** | ✅ SentinelFlow detecta PII y secretos |
+Teams integrating multiple LLM providers usually end up rebuilding the same control layer:
 
----
+- provider failover and health management
+- model selection and routing policies
+- API-key, tenant and project isolation
+- rate limits, budgets and cost accounting
+- PII, secret and prompt-security controls
+- audit trails and asynchronous events
+- observability and SLOs
+- enterprise identity and provisioning
 
-## ✨ Características
+SentinelFlow puts those concerns behind a single API and keeps the decision path explainable.
 
-| Característica | Descripción |
-|----------------|-------------|
-| ⚡ **Failover Automático** | Si un proveedor falla, cambia al siguiente sin intervención |
-| 🎯 **Smart Routing** | Elige el mejor proveedor por coste, latencia y salud |
-| 📊 **Cost Intelligence** | Trackeo de costes, budgets y alertas |
-| 🛡️ **Seguridad** | PII detection, secret detection, prompt injection |
-| 📝 **Audit Logs** | Registro completo de todas las peticiones |
-| 💾 **Caché Semántica** | Cachea respuestas por similitud (embeddings) |
-| 🔐 **Multi-tenancy** | Organizaciones, proyectos y RBAC |
-| 📈 **Observabilidad** | OpenTelemetry, métricas, TTFT, tracing |
-| 🚀 **Escalabilidad** | Kubernetes, Helm, HPA |
+## Architecture
 
----
+SentinelFlow is organized into five planes:
 
-## 🚀 Inicio rápido
+| Plane | Responsibility |
+|---|---|
+| **Control Plane** | Identity, tenancy, RBAC/ABAC, policies, models, providers, budgets, secrets and administration |
+| **Data Plane** | Gateway, authentication, authorization, quota, policy, security, cache, routing and execution |
+| **Event Plane** | Usage, audit, security, billing and asynchronous event processing |
+| **Provider Plane** | OpenAI, Anthropic, local/self-hosted and additional provider adapters |
+| **Observability Plane** | Metrics, traces, logs, SLOs, error budgets and operational analytics |
 
-### Con Go
+A typical request follows:
+
+`Client → Request ID → Auth → Tenant/Project → Authorization → Quota/Rate limit → Policy/Security → Idempotency/Cache → Routing → Provider → Fallback → Streaming → Usage/Events → Trace → Response`
+
+See [architecture.md](docs/architecture.md) and the [V4 architecture notes](docs/v4/GA.md).
+
+## Core capabilities
+
+- **Multi-provider routing:** provider/model eligibility, cost, latency, capacity, health, region and residency constraints.
+- **Failover:** provider failures can move execution to another eligible provider.
+- **Policy engine:** authentication/authorization, model and provider restrictions, security and budget controls.
+- **Policy lifecycle:** draft → validate → simulate → publish/canary → rollback.
+- **FinOps:** token/cost accounting, budgets, forecasting and cost-aware routing primitives.
+- **Security Center:** PII and secret detection, prompt-security controls and anomaly detection.
+- **Enterprise:** organizations, business units, environments, RBAC/ABAC, SAML 2.0, SCIM groups and approvals.
+- **Distributed runtime:** Redis-backed coordination, idempotency/rate limiting and transactional outbox/event processing.
+- **Observability:** Prometheus metrics, tracing hooks, provider SLOs and error budgets.
+- **Streaming:** normalized streaming execution with TTFT/throughput/duration measurements.
+- **Developer experience:** developer portal/playground plus Go and Python SDKs.
+- **Deployment:** Docker Compose, Kubernetes/Helm and Terraform foundations.
+- **Disaster recovery:** PostgreSQL backup/restore tooling and resilience/chaos tests.
+
+## Quick start
+
+### Requirements
+
+- Go 1.27+
+- PostgreSQL 15+ (17 recommended for the V4 Compose stack)
+- Redis 7+
+- Provider credentials for the providers you enable
+- Docker/Compose for the local multi-service stack
+
+### Build and test
 
 ```bash
-# Clonar
 git clone https://github.com/lecodev-26/sentinelflow.git
 cd sentinelflow
 
-# Instalar dependencias
-go mod tidy
-
-# Ejecutar
-make run
+go test ./...
+go build ./cmd/gateway ./cmd/controlplane ./cmd/worker ./cmd/cli ./cmd/migrator
 ```
 
-Con Docker
+### Configuration
+
+Copy the example environment file and provide your own values:
 
 ```bash
-docker run -p 8080:8080 sentinelflow:latest
+cp .env.example .env
 ```
 
-Con Kubernetes
+Never commit `.env` or real provider credentials.
+
+SentinelFlow V4 does **not** use the removed legacy `rules.yaml` configuration. Runtime policy belongs in the control plane/database, while production secrets should come from an external secret manager or the configured secret store.
+
+### Docker Compose
 
 ```bash
-helm install sentinelflow ./deployments/helm/sentinelflow
+docker compose -f deploy/v4/docker-compose.yml up --build
 ```
 
-Con Terraform
+The V4 Compose stack provides Gateway, Control Plane, Worker, PostgreSQL and Redis. It is a development/reference deployment, not a turnkey production environment.
+
+### Migrations
+
+Migrations are explicit. Use the migrator rather than relying on application startup to mutate production schemas:
 
 ```bash
-cd deployments/terraform
-terraform apply
+go run ./cmd/migrator status
+go run ./cmd/migrator up
 ```
 
----
+## API
 
-🌐 Accede a los servicios
+The gateway exposes OpenAI-compatible endpoints where implemented, including:
 
-Servicio URL
-Proxy http://localhost:8080
-Dashboard http://localhost:8080/dashboard
-Demo http://localhost:8080/demo
-Métricas http://localhost:9090/metrics
-Health Check http://localhost:8080/health
+- `POST /v1/chat/completions`
+- `POST /v1/responses`
+- `POST /v1/embeddings`
+- `GET /v1/models`
 
----
+Additional control-plane, audit, analytics, security, regions, webhooks, SAML and SCIM endpoints are documented in [API reference](docs/api.md).
 
-🔧 Configuración
+For deployment and operations, see:
 
-Edita configs/rules.yaml para personalizar:
+- [Quickstart](docs/quickstart.md)
+- [Deployment](docs/deployment.md)
+- [Operations](docs/operations.md)
+- [Production readiness](docs/v4/production-readiness.md)
 
-```yaml
-providers:
-  - name: openai
-    url: "https://api.openai.com/v1"
-    fallback: anthropic
-    headers:
-      Authorization: "Bearer ${OPENAI_API_KEY}"
+## SDKs
 
-  - name: anthropic
-    url: "https://api.anthropic.com/v1"
-    fallback: local-llama
-    headers:
-      x-api-key: "${ANTHROPIC_API_KEY}"
+Go and Python clients live under `sdk/`.
 
-  - name: local-llama
-    url: "http://localhost:11434/api"
-    fallback: ""
-
-rules:
-  - path: "/v1/chat/completions"
-    method: "POST"
-    cache: true
-    providers: ["openai", "anthropic", "local-llama"]
+```text
+sdk/
+├── go/
+└── python/
 ```
 
-🔑 Variables de entorno
+See [SDK documentation](sdk/README.md).
+
+## Repository map
+
+```text
+sentinelflow/
+├── cmd/                 # gateway, controlplane, worker, cli, migrator
+├── internal/            # domain and runtime packages
+├── migrations/          # database migrations
+├── deploy/v4/            # Docker Compose, Helm and Terraform
+├── sdk/                 # Go and Python clients
+├── tests/               # integration/load/e2e tests
+├── docs/                # architecture, API, operations and ADRs
+└── .github/             # CI and community health files
+```
+
+## Development workflow
 
 ```bash
-export OPENAI_API_KEY="sk-tu-key-aqui"
-export ANTHROPIC_API_KEY="ant-tu-key-aqui"
+# Fast validation
+go test ./...
+
+# Formatting and static checks
+gofmt -w .
+go vet ./...
+
+# Build production commands
+go build ./cmd/gateway ./cmd/controlplane ./cmd/worker ./cmd/cli ./cmd/migrator
+
+# Validate the working tree
+git diff --check
 ```
 
----
+Pull requests should include tests for behavioral changes and documentation for public API/configuration changes.
 
-🏗️ Arquitectura
+## Security
 
-```marckdown
-┌─────────────┐     ┌─────────────────────────────────────────────────────┐
-│   Clientes  │────▶│                  SentinelFlow                       │
-│   Agents    │     │                                                     │
-│   Apps      │     │  ┌─────────┐  ┌─────────┐  ┌─────────┐            │
-│   SDKs      │     │  │Security │  │ Router  │  │Policies │            │
-└─────────────┘     │  └────┬────┘  └────┬────┘  └────┬────┘            │
-                    │       │            │            │                   │
-                    │       └────────────┼────────────┘                   │
-                    │                    ▼                                │
-                    │           ┌────────────────┐                       │
-                    │           │ Cost Intelligence│                      │
-                    │           └────────────────┘                       │
-                    │                    │                                │
-                    │                    ▼                                │
-                    │           ┌────────────────┐                       │
-                    │           │ Observability  │                       │
-                    │           └────────────────┘                       │
-                    └─────────────────────────────────────────────────────┘
-                                        │
-                    ┌───────────────────┼───────────────────┐
-                    ▼                   ▼                   ▼
-             ┌───────────┐      ┌───────────┐      ┌───────────┐
-             │  OpenAI   │      │ Anthropic │      │ Local     │
-             └───────────┘      └───────────┘      └───────────┘
-```
+Please do not report vulnerabilities in public issues.
 
----
+Read [SECURITY.md](SECURITY.md) for responsible disclosure instructions.
 
-🛠️ Tecnologías
-```marckdown
-Tecnología Uso
-Go 1.21 Lenguaje principal
-Gorilla Mux Router HTTP
-Prometheus Métricas y monitoreo
-OpenTelemetry Tracing distribuido
-Redis Caché distribuida
-Kubernetes Orquestación
-Helm Despliegue
-Terraform Infraestructura como código
-```
----
+The repository also includes CI checks for dependency verification, filesystem vulnerability scanning, SBOM generation and release signing.
 
-📋 Roadmap
-```marckdown
-Estado Funcionalidad
-✅ Proxy con failover automático
-✅ Dashboard en tiempo real
-✅ Métricas Prometheus
-✅ Rate Limiting
-✅ Smart Routing (coste, latencia, salud)
-✅ Caché en memoria y distribuida (Redis)
-✅ Logs estructurados
-✅ OpenTelemetry tracing
-✅ PII / Secret Detection
-✅ Prompt Injection Detection
-✅ Audit Logs
-✅ Policy Engine
-✅ Multi-tenancy + RBAC
-✅ Kubernetes + Helm + Terraform
-✅ Cost Tracking + Budgets
-✅ Semantic Cache
-✅ Demo interactiva
-```
----
+## Roadmap
 
-🤝 Contribuciones
+- **V3:** enterprise, routing, FinOps, security, developer experience and resilience foundations.
+- **V4:** AI Gateway + intelligent routing + policy + FinOps + enterprise control plane + distributed runtime.
+- **V5:** planned with the next roadmap maintained separately from this release.
 
-¡Las contribuciones son bienvenidas!
+See [CHANGELOG.md](CHANGELOG.md) for project history and [V4 GA](docs/v4/GA.md) for the current architecture milestone.
 
-1. Fork el repositorio
-2. Crea una rama: git checkout -b feature/nueva-funcionalidad
-3. Haz commit: git commit -m "Añadir nueva funcionalidad"
-4. Push: git push origin feature/nueva-funcionalidad
-5. Abre un Pull Request
+## Contributing
 
----
+Contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md), read the [Code of Conduct](CODE_OF_CONDUCT.md), and open an issue before large architectural changes.
 
-📄 Licencia
+## License
 
-MIT License - ver LICENSE para más detalles.
+SentinelFlow is released under the [MIT License](LICENSE).
 
 ---
 
 <div align="center">
 
-⭐ ¡Si te ha sido útil, dale una estrella! ⭐
-
+If SentinelFlow is useful to you, consider starring the repository and sharing what you build with it.
 
 </div>

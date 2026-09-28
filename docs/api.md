@@ -1,208 +1,70 @@
-# SentinelFlow - API Reference
+# API Reference
 
-Base URL: `http://localhost:8081/v1`
+SentinelFlow exposes two API surfaces: the **Gateway** for model traffic and the **Control Plane** for administration.
 
-## Health
+> Endpoint availability and response fields are defined by the current code. This document intentionally describes the stable surface without inventing undocumented fields.
 
-### GET /health
+## Gateway
 
-Returns service health.
+Typical local address: `http://localhost:8080`.
 
-```json
-{
-  "status": "ok",
-  "service": "sentinelflow-control-plane",
-  "version": "1.0.0"
-}
-```
+### OpenAI-compatible model APIs
 
-Organizations
+- `POST /v1/chat/completions` — chat completions.
+- `POST /v1/responses` — normalized Responses-style requests.
+- `POST /v1/embeddings` — embeddings.
+- `GET /v1/models` — model catalog.
 
-GET /organizations
+Gateway requests use the authenticated API key to derive tenant/project/environment context. Do not send tenant identity as an untrusted substitute for authentication.
 
-List all organizations.
+### Operational endpoints
 
-POST /organizations
+- `/health`, `/livez`, `/readyz` — health/readiness where enabled by the service.
+- `/metrics` — Prometheus metrics.
 
-Create a new organization.
+## Control Plane
 
-```json
-{
-  "name": "Acme Corp",
-  "description": "Production tenant"
-}
-```
+Typical local address: `http://localhost:8081`.
 
-GET /organizations/{id}
+The control plane manages organizations, projects, users, API keys, providers, budgets, policies, approvals, environments, regions, business units, audit, analytics, security events, webhooks and enterprise identity integrations.
 
-Get organization details.
+Representative endpoints include:
 
-POST /organizations/{id}/projects
+| Area | Endpoints |
+|---|---|
+| Organizations | `GET/POST /organizations`, `GET /organizations/{id}` |
+| Business units | `GET/POST /organizations/{id}/business-units`, `GET/DELETE /business-units/{id}` |
+| Projects | project endpoints under the organization hierarchy |
+| API keys | API-key creation/revocation endpoints |
+| Approvals | approval request create/list/approve/reject/cancel endpoints |
+| Regions | `GET /v1/regions` |
+| Audit | `GET /v1/audit` |
+| Analytics | `GET /v1/analytics/daily` |
+| Security | `GET /v1/security/events`, `GET /v1/security/anomalies` |
+| Webhooks | `/v1/webhooks` CRUD and delivery history |
+| SAML | `/auth/saml/metadata`, `/auth/saml/login`, `/auth/saml/acs` |
+| SCIM | `/scim/v2/Groups` and group member operations |
 
-Create a project.
+Authentication and scopes are enforced by the service; exact route prefixes can vary between gateway and control-plane binaries. Inspect the handlers in `cmd/` and `internal/` when integrating against a pinned commit.
 
-```json
-{
-  "name": "Production",
-  "description": "Production project"
-}
-```
+## Authentication
 
-Users
+Gateway authentication uses SentinelFlow API keys. Production deployments fail closed when authentication configuration is missing or invalid.
 
-POST /users
+Never put provider credentials in client requests. Provider credentials belong to SentinelFlow's provider/secret configuration.
 
-Create a user.
+## Idempotency
 
-```json
-{
-  "email": "user@example.com",
-  "name": "John Doe",
-  "role": "admin",
-  "org_id": "org_xxx"
-}
-```
+Where supported, clients can send `Idempotency-Key` to make retry behavior deterministic. Distributed idempotency state is designed for multi-instance deployments.
 
-GET /users/{id}
+## Streaming
 
-Get user details.
+Streaming endpoints expose provider output incrementally. The gateway records stream start/chunk/completion/failure telemetry and distinguishes failures that occur before and after streaming begins.
 
-POST /users/{id}/api-keys
+## Errors
 
-Create an API key. Returns the key ONCE.
+Clients should treat HTTP status and the response body as the source of truth. Common classes include authentication (`401`), authorization/policy (`403`), rate/quota (`429`/quota-specific), provider failures (`5xx`) and invalid requests (`400`).
 
-```json
-{
-  "name": "production-key",
-  "project_id": "proj_xxx"
-}
-```
+## Versioning
 
-Response:
-
-```json
-{
-  "api_key": {...},
-  "key": "sf_xxxxx",
-  "warning": "Save this key securely, it won't be shown again."
-}
-```
-
-POST /api-keys/{key}/revoke
-
-Revoke an API key.
-
-Providers
-
-GET /providers
-
-List all providers with real health status.
-
-```json
-{
-  "count": 3,
-  "providers": [
-    {
-      "name": "openai",
-      "status": {
-        "status": "healthy",
-        "latency_ms": 120,
-        "consecutive_fails": 0
-      },
-      "circuit_breaker": "closed"
-    }
-  ]
-}
-```
-
-GET /circuit-breakers
-
-Get circuit breaker states.
-
-GET /budgets
-
-List all tenant budgets.
-
-Metrics
-
-GET /metrics/overview
-
-```json
-{
-  "uptime_seconds": 3600,
-  "requests": 1820000,
-  "cost_usd": 483.20,
-  "latency_p95_ms": 420,
-  "error_rate": 0.18,
-  "cache_hit_rate": 0.42,
-  "trends": {
-    "requests": 12.4,
-    "cost": 8.1,
-    "latency": -5.2,
-    "error_rate": -2.1
-  }
-}
-```
-
-GET /metrics/providers
-
-Provider status with real-time health.
-
-GET /metrics/security
-
-Security metrics:
-
-```json
-{
-  "pii_blocked": 142,
-  "secrets_blocked": 18,
-  "injection_blocked": 39,
-  "requests_blocked": 7
-}
-```
-
-GET /metrics/system
-
-System metrics:
-
-```json
-{
-  "goroutines": 16,
-  "heap_alloc_mb": 1.99,
-  "heap_sys_mb": 7.28,
-  "gc_count": 3,
-  "go_version": "go1.27.1",
-  "num_cpu": 8
-}
-```
-
-GET /metrics/timeseries
-
-Time series data for charts.
-
-Errors
-
-All errors follow this format:
-
-```json
-{
-  "error": {
-    "type": "invalid_request",
-    "message": "model is required",
-    "details": null
-  }
-}
-```
-
-Error types:
-
-· authentication_error (401)
-· authorization_error (403)
-· policy_denied (403)
-· rate_limited (429)
-· quota_exceeded (402)
-· provider_unavailable (503)
-· provider_timeout (504)
-· provider_error (502)
-· invalid_request (400)
-· internal_error (500)
+Pin client integrations to a release/commit when strict compatibility matters. Public API changes should include tests and documentation updates.

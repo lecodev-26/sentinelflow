@@ -1,93 +1,27 @@
-# SentinelFlow - Documentación
+# Documentation
 
-## Índice
+SentinelFlow documentation is split by audience.
 
-1. [Introducción](#introducción)
-2. [Instalación](#instalación)
-3. [Configuración](#configuración)
-4. [Proveedores](#proveedores)
-5. [Seguridad](#seguridad)
-6. [Observabilidad](#observabilidad)
-7. [Benchmark](#benchmark)
+## Start here
 
-## Introducción
+1. [README](../README.md) — project overview and quick start.
+2. [Quickstart](quickstart.md) — local development.
+3. [Architecture](architecture.md) — system design.
+4. [API reference](api.md) — HTTP endpoints.
+5. [Deployment](deployment.md) — Docker/Kubernetes/Terraform.
+6. [Operations](operations.md) — migrations, backups, health and troubleshooting.
 
-SentinelFlow es un AI Gateway que actúa como capa de control para aplicaciones multi-LLM.
+## V4
 
-### Características principales
+- [V4 GA](v4/GA.md)
+- [V4 production readiness](v4/production-readiness.md)
 
-- ✅ **Failover automático** entre proveedores
-- ✅ **Smart Routing** por coste, latencia y salud
-- ✅ **Seguridad** con PII detection y prompt injection
-- ✅ **Observabilidad** con OpenTelemetry y métricas
-- ✅ **Multi-tenancy** con RBAC y API keys
-- ✅ **Caché** semántica y distribuida
+## Architecture decisions
 
-## Instalación
+- [ADR 0001 — PostgreSQL](v3/adr/0001-postgresql.md)
+- [ADR 0002 — Event Bus](v3/adr/0002-event-bus.md)
+- [ADR 0003 — Streaming](v3/adr/0003-streaming.md)
+- [ADR 0004 — Tenant Isolation](v3/adr/0004-tenant-isolation.md)
+- [ADR 0005 — Policy Engine](v3/adr/0005-policy-engine.md)
 
-### Con Docker
-
-```bash
-docker run -p 8080:8080 sentinelflow:latest
-```
-
-Con Kubernetes
-
-```bash
-helm install sentinelflow ./deployments/helm/sentinelflow
-```
-
-Con Terraform
-
-```bash
-cd deployments/terraform
-terraform apply
-```
-
-Configuración
-
-El archivo configs/rules.yaml permite configurar:
-
-```yaml
-providers:
-  - name: openai
-    url: "https://api.openai.com/v1"
-    fallback: anthropic
-
-rules:
-  - path: "/v1/chat/completions"
-    method: "POST"
-    cache: true
-    providers: ["openai", "anthropic", "local-llama"]
-```
-
-Proveedores
-
-Proveedor Soporte Estado
-OpenAI ✅ Estable
-Anthropic ✅ Estable
-Local Llama ✅ Experimental
-
-Seguridad
-
-SentinelFlow incluye:
-
-· PII detection
-· Secret detection
-· Prompt injection detection
-· Policy engine
-· API keys + JWT
-
-Observabilidad
-
-Métricas disponibles:
-
-· TTFT (Time To First Token)
-· Coste por petición
-· Tokens por modelo
-· Tasa de fallos
-· Latencia
-
-Benchmark
-
-Ver benchmark.md para resultados detallados.
+Historical V2/V3 documents are retained under `docs/v2` and `docs/v3` as implementation history. They are not the authoritative V4 configuration model.

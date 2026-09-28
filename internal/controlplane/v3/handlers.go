@@ -146,10 +146,6 @@ func (h *Handlers) GetBusinessUnit(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, v)
 }
 func (h *Handlers) CreateBusinessUnit(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Name, Description string `json:"name"`
-	}
-	_ = req
 	var body struct {
 		Name        string `json:"name"`
 		Description string `json:"description"`
