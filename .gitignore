@@ -55,3 +55,7 @@ backups/
 /cli
 /migrator
 /sentinelflow
+
+# SDK generated files
+sdk/python/sentinelflow/__pycache__/
+*.pyc
