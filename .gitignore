@@ -59,3 +59,10 @@ backups/
 # SDK generated files
 sdk/python/sentinelflow/__pycache__/
 *.pyc
+
+# V4 local runtime artifacts
+*.db
+*.db-*
+coverage.out
+coverage.html
+bin/
