@@ -9,11 +9,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/gorilla/mux"
 	accountingv3 "github.com/lecodev-26/sentinelflow/internal/accounting/v3"
+	aicore "github.com/lecodev-26/sentinelflow/internal/ai/v5/core"
 	"github.com/lecodev-26/sentinelflow/internal/events"
 	gatewayv3 "github.com/lecodev-26/sentinelflow/internal/gateway/v3"
 	"github.com/lecodev-26/sentinelflow/internal/gateway/v3/executor"
@@ -28,6 +30,7 @@ import (
 	"github.com/lecodev-26/sentinelflow/internal/rbac"
 	routing "github.com/lecodev-26/sentinelflow/internal/routing/v3"
 	securityv3 "github.com/lecodev-26/sentinelflow/internal/security/v3"
+	aisecurity "github.com/lecodev-26/sentinelflow/internal/security/v5/ai"
 	"github.com/lecodev-26/sentinelflow/internal/storage/postgres"
 	"github.com/lecodev-26/sentinelflow/internal/version"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -155,6 +158,8 @@ func main() {
 	anomalyDetector := securityv3.NewAnomalyDetector(time.Minute, 60, 1000)
 	anomalyMw := middleware.NewAnomalyMiddleware(anomalyDetector)
 	toolGateway := gatewayv3.NewToolGateway()
+	v5Analyzer := aicore.NewAnalyzer()
+	v5Security := aisecurity.NewDetector()
 
 	// === Router ===
 	r := mux.NewRouter()
@@ -411,6 +416,19 @@ func main() {
 		}
 
 		tenantID := middleware.GetTenantID(req.Context())
+		var v5Input strings.Builder
+		for _, m := range normReq.Messages {
+			v5Input.WriteString(m.Role)
+			v5Input.WriteString(": ")
+			v5Input.WriteString(m.Content)
+			v5Input.WriteString("\n")
+		}
+		v5Analysis := v5Analyzer.Analyze(v5Input.String(), len(normReq.Tools))
+		v5Findings := v5Security.Scan(v5Input.String())
+		if aisecurity.Highest(v5Findings) == aisecurity.ActionBlock {
+			writeError(w, http.StatusBadRequest, "ai_security_block", "request blocked by SentinelFlow V5 AI security")
+			return
+		}
 		if len(normReq.Tools) > 0 {
 			toolDefs := make([]gatewayv3.ToolDefinition, 0, len(normReq.Tools))
 			for _, t := range normReq.Tools {
@@ -477,6 +495,7 @@ func main() {
 		}
 
 		if normReq.Stream {
+			w.Header().Set("X-SentinelFlow-V5-Intent", string(v5Analysis.Requirements.Intent))
 			handleStreamWithFailover(w, req, exec, candidates, chatReq, tenantID, userID, apiKeyID)
 			return
 		}
@@ -501,6 +520,8 @@ func main() {
 		w.Header().Set("X-Tenant-Id", tenantID)
 		w.Header().Set("X-User-Id", userID)
 		w.Header().Set("X-Api-Key-Id", apiKeyID)
+		w.Header().Set("X-SentinelFlow-V5-Intent", string(v5Analysis.Requirements.Intent))
+		w.Header().Set("X-SentinelFlow-V5-Complexity", fmt.Sprintf("%.2f", v5Analysis.Requirements.Complexity))
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(resp)
 	})
