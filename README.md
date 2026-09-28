@@ -26,6 +26,10 @@ It provides one gateway for authentication, tenant isolation, policy enforcement
 
 > **Project status:** V4 architecture and roadmap are implemented in the repository. Production deployment still requires environment-specific PostgreSQL/Redis, provider credentials, identity configuration and operational verification. See [production readiness](docs/v4/production-readiness.md).
 
+## V5 development
+
+> SentinelFlow V5 is developed on the `v5` branch. It adds intelligent request understanding, adaptive routing, agent runtime, tools, memory/RAG, AI security, evaluation and governance. See [V5 architecture](docs/v5/ARCHITECTURE.md) and [V5 roadmap](docs/v5/ROADMAP.md).
+
 ## What can you build with it?
 
 - **LLM gateway:** expose one stable API while changing providers behind it.

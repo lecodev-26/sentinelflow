@@ -1,0 +1,21 @@
+name: SentinelFlow V5 CI
+on:
+  push:
+    branches: [v5]
+  pull_request:
+    branches: [v5]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: go test ./...
+      - run: go vet ./...
+      - run: test -z "$(gofmt -l .)"
+      - run: go build ./cmd/gateway ./cmd/controlplane ./cmd/worker ./cmd/cli ./cmd/migrator
+      - run: git diff --check
