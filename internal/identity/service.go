@@ -17,6 +17,7 @@ type Service struct {
 	orgs          *postgres.OrganizationRepo
 	projects      *postgres.ProjectRepo
 	businessUnits *postgres.BusinessUnitRepo
+	groups        *postgres.SCIMGroupRepo
 	users         *postgres.UserRepo
 	keys          *postgres.APIKeyRepo
 	client        *postgres.Client
@@ -28,6 +29,7 @@ func NewService(client *postgres.Client) *Service {
 		orgs:          client.Organizations(),
 		projects:      client.Projects(),
 		businessUnits: client.BusinessUnits(),
+		groups:        client.SCIMGroups(),
 		users:         client.Users(),
 		keys:          client.APIKeys(),
 		client:        client,
@@ -153,6 +155,42 @@ func (s *Service) ListProjects(ctx context.Context, orgID string) ([]*postgres.P
 // DeleteProject elimina un proyecto
 func (s *Service) DeleteProject(ctx context.Context, id string) error {
 	return s.projects.Delete(ctx, id)
+}
+
+// === SCIM GROUPS ===
+func (s *Service) CreateSCIMGroup(ctx context.Context, orgID, name, externalID string) (*postgres.SCIMGroup, error) {
+	if orgID == "" || strings.TrimSpace(name) == "" {
+		return nil, errors.New("org_id and display_name are required")
+	}
+	if _, e := s.orgs.GetByID(ctx, orgID); e != nil {
+		return nil, errors.New("organization not found")
+	}
+	g := &postgres.SCIMGroup{ID: idgen.NewID("grp"), OrgID: orgID, DisplayName: strings.TrimSpace(name), ExternalID: strings.TrimSpace(externalID)}
+	if e := s.groups.Create(ctx, g); e != nil {
+		return nil, e
+	}
+	return g, nil
+}
+func (s *Service) GetSCIMGroup(ctx context.Context, id string) (*postgres.SCIMGroup, error) {
+	return s.groups.Get(ctx, id)
+}
+func (s *Service) ListSCIMGroups(ctx context.Context, org string) ([]*postgres.SCIMGroup, error) {
+	return s.groups.List(ctx, org)
+}
+func (s *Service) DeleteSCIMGroup(ctx context.Context, id string) error {
+	return s.groups.Delete(ctx, id)
+}
+func (s *Service) SCIMGroupMembers(ctx context.Context, id string) ([]postgres.SCIMGroupMember, error) {
+	return s.groups.Members(ctx, id)
+}
+func (s *Service) AddSCIMGroupMember(ctx context.Context, id, user string) error {
+	if _, e := s.users.GetByID(ctx, user); e != nil {
+		return errors.New("user not found")
+	}
+	return s.groups.AddMember(ctx, id, user)
+}
+func (s *Service) RemoveSCIMGroupMember(ctx context.Context, id, user string) error {
+	return s.groups.RemoveMember(ctx, id, user)
 }
 
 // === USERS ===

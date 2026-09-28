@@ -50,6 +50,8 @@ func (h *Handler) Register(r *mux.Router) {
 	scim := r.PathPrefix("/scim/v2").Subrouter()
 	scim.HandleFunc("/Users", h.handleUsers).Methods("GET", "POST")
 	scim.HandleFunc("/Users/{id}", h.handleUser).Methods("GET", "PATCH", "PUT", "DELETE")
+	scim.HandleFunc("/Groups", h.handleGroups).Methods("GET", "POST")
+	scim.HandleFunc("/Groups/{id}", h.handleGroup).Methods("GET", "PATCH", "PUT", "DELETE")
 	scim.HandleFunc("/ServiceProviderConfig", h.handleConfig).Methods("GET")
 	scim.HandleFunc("/Schemas", h.handleSchemas).Methods("GET")
 }
@@ -221,6 +223,94 @@ func (h *Handler) updateUser(w http.ResponseWriter, r *http.Request, id string) 
 	result.Meta.Location = "/scim/v2/Users/" + updated.ID
 
 	json.NewEncoder(w).Encode(result)
+}
+
+func (h *Handler) handleGroups(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/scim+json")
+	if r.Method == http.MethodGet {
+		org := r.URL.Query().Get("org_id")
+		gs, e := h.identitySvc.ListSCIMGroups(r.Context(), org)
+		if e != nil {
+			h.writeError(w, 500, e.Error())
+			return
+		}
+		res := make([]any, 0, len(gs))
+		for _, g := range gs {
+			m, _ := h.identitySvc.SCIMGroupMembers(r.Context(), g.ID)
+			res = append(res, map[string]any{"schemas": []string{"urn:ietf:params:scim:schemas:core:2.0:Group"}, "id": g.ID, "displayName": g.DisplayName, "externalId": g.ExternalID, "members": m})
+		}
+		json.NewEncoder(w).Encode(map[string]any{"schemas": []string{"urn:ietf:params:scim:api:messages:2.0:ListResponse"}, "totalResults": len(res), "Resources": res})
+		return
+	}
+	var in struct {
+		DisplayName, ExternalID, OrgID string `json:"displayName"`
+	}
+	_ = in
+	var body struct {
+		DisplayName string `json:"displayName"`
+		ExternalID  string `json:"externalId"`
+		OrgID       string `json:"orgId"`
+	}
+	if e := json.NewDecoder(r.Body).Decode(&body); e != nil {
+		h.writeError(w, 400, "invalid JSON")
+		return
+	}
+	g, e := h.identitySvc.CreateSCIMGroup(r.Context(), body.OrgID, body.DisplayName, body.ExternalID)
+	if e != nil {
+		h.writeError(w, 400, e.Error())
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]any{"schemas": []string{"urn:ietf:params:scim:schemas:core:2.0:Group"}, "id": g.ID, "displayName": g.DisplayName, "externalId": g.ExternalID})
+}
+func (h *Handler) handleGroup(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
+	if r.Method == http.MethodGet {
+		g, e := h.identitySvc.GetSCIMGroup(r.Context(), id)
+		if e != nil {
+			h.writeError(w, 404, "group not found")
+			return
+		}
+		m, _ := h.identitySvc.SCIMGroupMembers(r.Context(), id)
+		json.NewEncoder(w).Encode(map[string]any{"schemas": []string{"urn:ietf:params:scim:schemas:core:2.0:Group"}, "id": g.ID, "displayName": g.DisplayName, "externalId": g.ExternalID, "members": m})
+		return
+	}
+	if r.Method == http.MethodDelete {
+		if e := h.identitySvc.DeleteSCIMGroup(r.Context(), id); e != nil {
+			h.writeError(w, 404, "group not found")
+			return
+		}
+		w.WriteHeader(204)
+		return
+	}
+	var body struct {
+		Members []struct {
+			Value     string `json:"value"`
+			Operation string `json:"operation"`
+		} `json:"members"`
+	}
+	if e := json.NewDecoder(r.Body).Decode(&body); e != nil {
+		h.writeError(w, 400, "invalid JSON")
+		return
+	}
+	for _, m := range body.Members {
+		var e error
+		if strings.EqualFold(m.Operation, "delete") {
+			e = h.identitySvc.RemoveSCIMGroupMember(r.Context(), id, m.Value)
+		} else {
+			e = h.identitySvc.AddSCIMGroupMember(r.Context(), id, m.Value)
+		}
+		if e != nil {
+			h.writeError(w, 400, e.Error())
+			return
+		}
+	}
+	g, e := h.identitySvc.GetSCIMGroup(r.Context(), id)
+	if e != nil {
+		h.writeError(w, 404, "group not found")
+		return
+	}
+	members, _ := h.identitySvc.SCIMGroupMembers(r.Context(), id)
+	json.NewEncoder(w).Encode(map[string]any{"schemas": []string{"urn:ietf:params:scim:schemas:core:2.0:Group"}, "id": g.ID, "displayName": g.DisplayName, "externalId": g.ExternalID, "members": members})
 }
 
 func (h *Handler) handleConfig(w http.ResponseWriter, r *http.Request) {
