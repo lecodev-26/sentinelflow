@@ -9,13 +9,14 @@ import (
 
 // Project representa un proyecto
 type Project struct {
-	ID          string                 `json:"id"`
-	OrgID       string                 `json:"org_id"`
-	Name        string                 `json:"name"`
-	Description string                 `json:"description"`
-	Settings    map[string]interface{} `json:"settings"`
-	CreatedAt   time.Time              `json:"created_at"`
-	UpdatedAt   time.Time              `json:"updated_at"`
+	ID             string                 `json:"id"`
+	OrgID          string                 `json:"org_id"`
+	BusinessUnitID string                 `json:"business_unit_id,omitempty"`
+	Name           string                 `json:"name"`
+	Description    string                 `json:"description"`
+	Settings       map[string]interface{} `json:"settings"`
+	CreatedAt      time.Time              `json:"created_at"`
+	UpdatedAt      time.Time              `json:"updated_at"`
 }
 
 // ProjectRepo gestiona proyectos
@@ -39,20 +40,20 @@ func (r *ProjectRepo) Create(ctx context.Context, p *Project) error {
 	}
 
 	_, err := r.client.Exec(ctx, `
-INSERT INTO projects (id, org_id, name, description, settings, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		p.ID, p.OrgID, p.Name, p.Description, settingsJSON, p.CreatedAt, p.UpdatedAt)
+INSERT INTO projects (id, org_id, business_unit_id, name, description, settings, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		p.ID, p.OrgID, nullIfEmpty(p.BusinessUnitID), p.Name, p.Description, settingsJSON, p.CreatedAt, p.UpdatedAt)
 	return err
 }
 
 func (r *ProjectRepo) GetByID(ctx context.Context, id string) (*Project, error) {
 	row := r.client.QueryRow(ctx, `
-SELECT id, org_id, name, description, settings, created_at, updated_at
+SELECT id, org_id, COALESCE(business_unit_id, ''), name, description, settings, created_at, updated_at
 FROM projects WHERE id = $1`, id)
 
 	var p Project
 	var settingsJSON []byte
-	err := row.Scan(&p.ID, &p.OrgID, &p.Name, &p.Description, &settingsJSON, &p.CreatedAt, &p.UpdatedAt)
+	err := row.Scan(&p.ID, &p.OrgID, &p.BusinessUnitID, &p.Name, &p.Description, &settingsJSON, &p.CreatedAt, &p.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
@@ -68,7 +69,7 @@ FROM projects WHERE id = $1`, id)
 
 func (r *ProjectRepo) ListByOrg(ctx context.Context, orgID string) ([]*Project, error) {
 	rows, err := r.client.Query(ctx, `
-SELECT id, org_id, name, description, settings, created_at, updated_at
+SELECT id, org_id, COALESCE(business_unit_id, ''), name, description, settings, created_at, updated_at
 FROM projects WHERE org_id = $1 ORDER BY created_at DESC`, orgID)
 	if err != nil {
 		return nil, err
@@ -111,4 +112,11 @@ func (r *ProjectRepo) Delete(ctx context.Context, id string) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+func nullIfEmpty(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
 }

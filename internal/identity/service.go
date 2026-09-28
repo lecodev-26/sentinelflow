@@ -14,21 +14,23 @@ import (
 
 // Service agrupa la lógica de negocio de identity
 type Service struct {
-	orgs     *postgres.OrganizationRepo
-	projects *postgres.ProjectRepo
-	users    *postgres.UserRepo
-	keys     *postgres.APIKeyRepo
-	client   *postgres.Client
+	orgs          *postgres.OrganizationRepo
+	projects      *postgres.ProjectRepo
+	businessUnits *postgres.BusinessUnitRepo
+	users         *postgres.UserRepo
+	keys          *postgres.APIKeyRepo
+	client        *postgres.Client
 }
 
 // NewService crea un nuevo servicio
 func NewService(client *postgres.Client) *Service {
 	return &Service{
-		orgs:     client.Organizations(),
-		projects: client.Projects(),
-		users:    client.Users(),
-		keys:     client.APIKeys(),
-		client:   client,
+		orgs:          client.Organizations(),
+		projects:      client.Projects(),
+		businessUnits: client.BusinessUnits(),
+		users:         client.Users(),
+		keys:          client.APIKeys(),
+		client:        client,
 	}
 }
 
@@ -74,12 +76,45 @@ func (s *Service) DeleteOrganization(ctx context.Context, id string) error {
 	return s.orgs.Delete(ctx, id)
 }
 
+// === BUSINESS UNITS ===
+func (s *Service) CreateBusinessUnit(ctx context.Context, orgID, name, description string) (*postgres.BusinessUnit, error) {
+	if orgID == "" {
+		return nil, errors.New("org_id is required")
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, errors.New("name is required")
+	}
+	if _, err := s.orgs.GetByID(ctx, orgID); err != nil {
+		return nil, errors.New("organization not found")
+	}
+	b := &postgres.BusinessUnit{ID: idgen.NewID("bu"), OrgID: orgID, Name: name, Description: description, Settings: map[string]interface{}{}}
+	if err := s.businessUnits.Create(ctx, b); err != nil {
+		return nil, fmt.Errorf("failed to create business unit: %w", err)
+	}
+	return b, nil
+}
+func (s *Service) GetBusinessUnit(ctx context.Context, id string) (*postgres.BusinessUnit, error) {
+	return s.businessUnits.GetByID(ctx, id)
+}
+func (s *Service) ListBusinessUnits(ctx context.Context, orgID string) ([]*postgres.BusinessUnit, error) {
+	return s.businessUnits.ListByOrg(ctx, orgID)
+}
+func (s *Service) DeleteBusinessUnit(ctx context.Context, id string) error {
+	return s.businessUnits.Delete(ctx, id)
+}
+
 // === PROJECTS ===
 
 // CreateProject crea un proyecto con validación
-func (s *Service) CreateProject(ctx context.Context, orgID, name, description string) (*postgres.Project, error) {
+func (s *Service) CreateProject(ctx context.Context, orgID, businessUnitID, name, description string) (*postgres.Project, error) {
 	if orgID == "" {
 		return nil, errors.New("org_id is required")
+	}
+	if businessUnitID != "" {
+		if bu, err := s.businessUnits.GetByID(ctx, businessUnitID); err != nil || bu.OrgID != orgID {
+			return nil, errors.New("business unit not found in organization")
+		}
 	}
 	if name = strings.TrimSpace(name); name == "" {
 		return nil, errors.New("name is required")
@@ -90,11 +125,12 @@ func (s *Service) CreateProject(ctx context.Context, orgID, name, description st
 	}
 
 	project := &postgres.Project{
-		ID:          idgen.NewID("proj"),
-		OrgID:       orgID,
-		Name:        name,
-		Description: description,
-		Settings:    map[string]interface{}{},
+		ID:             idgen.NewID("proj"),
+		OrgID:          orgID,
+		BusinessUnitID: businessUnitID,
+		Name:           name,
+		Description:    description,
+		Settings:       map[string]interface{}{},
 	}
 
 	if err := s.projects.Create(ctx, project); err != nil {

@@ -47,6 +47,8 @@ func (h *Handlers) Register(r *mux.Router) {
 	read.HandleFunc("/organizations", h.ListOrganizations).Methods("GET")
 	read.HandleFunc("/organizations/{id}", h.GetOrganization).Methods("GET")
 	read.HandleFunc("/organizations/{id}/projects", h.ListProjects).Methods("GET")
+	read.HandleFunc("/organizations/{id}/business-units", h.ListBusinessUnits).Methods("GET")
+	read.HandleFunc("/business-units/{id}", h.GetBusinessUnit).Methods("GET")
 	read.HandleFunc("/projects/{id}", h.GetProject).Methods("GET")
 	read.HandleFunc("/organizations/{id}/users", h.ListUsers).Methods("GET")
 	read.HandleFunc("/users/{id}", h.GetUser).Methods("GET")
@@ -60,6 +62,8 @@ func (h *Handlers) Register(r *mux.Router) {
 	write.HandleFunc("/organizations", h.CreateOrganization).Methods("POST")
 	write.HandleFunc("/organizations/{id}", h.DeleteOrganization).Methods("DELETE")
 	write.HandleFunc("/organizations/{id}/projects", h.CreateProject).Methods("POST")
+	write.HandleFunc("/organizations/{id}/business-units", h.CreateBusinessUnit).Methods("POST")
+	write.HandleFunc("/business-units/{id}", h.DeleteBusinessUnit).Methods("DELETE")
 	write.HandleFunc("/projects/{id}", h.DeleteProject).Methods("DELETE")
 	write.HandleFunc("/users", h.CreateUser).Methods("POST")
 	write.HandleFunc("/users/{id}", h.DeleteUser).Methods("DELETE")
@@ -86,8 +90,9 @@ func (h *Handlers) ListOrganizations(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) CreateOrganization(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
+		Name           string `json:"name"`
+		BusinessUnitID string `json:"business_unit_id"`
+		Description    string `json:"description"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", "invalid JSON")
@@ -122,6 +127,52 @@ func (h *Handlers) DeleteOrganization(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// === BUSINESS UNITS ===
+func (h *Handlers) ListBusinessUnits(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
+	v, err := h.svc.ListBusinessUnits(r.Context(), id)
+	if err != nil {
+		writeError(w, 500, "internal_error", err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]interface{}{"data": v, "total": len(v)})
+}
+func (h *Handlers) GetBusinessUnit(w http.ResponseWriter, r *http.Request) {
+	v, err := h.svc.GetBusinessUnit(r.Context(), mux.Vars(r)["id"])
+	if err != nil {
+		writeError(w, 404, "not_found", "business unit not found")
+		return
+	}
+	writeJSON(w, 200, v)
+}
+func (h *Handlers) CreateBusinessUnit(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name, Description string `json:"name"`
+	}
+	_ = req
+	var body struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, 400, "invalid_request", "invalid JSON")
+		return
+	}
+	v, err := h.svc.CreateBusinessUnit(r.Context(), mux.Vars(r)["id"], body.Name, body.Description)
+	if err != nil {
+		writeError(w, 400, "invalid_request", err.Error())
+		return
+	}
+	writeJSON(w, 201, v)
+}
+func (h *Handlers) DeleteBusinessUnit(w http.ResponseWriter, r *http.Request) {
+	if err := h.svc.DeleteBusinessUnit(r.Context(), mux.Vars(r)["id"]); err != nil {
+		writeError(w, 404, "not_found", "business unit not found")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // === PROJECTS ===
 
 func (h *Handlers) ListProjects(w http.ResponseWriter, r *http.Request) {
@@ -140,15 +191,16 @@ func (h *Handlers) ListProjects(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) CreateProject(w http.ResponseWriter, r *http.Request) {
 	orgID := mux.Vars(r)["id"]
 	var req struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
+		Name           string `json:"name"`
+		BusinessUnitID string `json:"business_unit_id"`
+		Description    string `json:"description"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", "invalid JSON")
 		return
 	}
 
-	project, err := h.svc.CreateProject(r.Context(), orgID, req.Name, req.Description)
+	project, err := h.svc.CreateProject(r.Context(), orgID, req.BusinessUnitID, req.Name, req.Description)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
