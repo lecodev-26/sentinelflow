@@ -79,13 +79,13 @@ clean:
 	go clean
 
 docker-build-gateway:
-	docker build --build-arg SERVICE=gateway -t sentinelflow-gateway:5.0.0 .
+	docker build --build-arg SERVICE=gateway -t sentinelflow-gateway:5.0.1 .
 
 docker-build-controlplane:
-	docker build --build-arg SERVICE=controlplane -t sentinelflow-controlplane:5.0.0 .
+	docker build --build-arg SERVICE=controlplane -t sentinelflow-controlplane:5.0.1 .
 
 docker-build-worker:
-	docker build --build-arg SERVICE=worker -t sentinelflow-worker:5.0.0 .
+	docker build --build-arg SERVICE=worker -t sentinelflow-worker:5.0.1 .
 
 backup:
 	./scripts/backup.sh

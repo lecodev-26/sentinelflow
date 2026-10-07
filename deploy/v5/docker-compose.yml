@@ -3,10 +3,10 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile
-      args: {SERVICE: gateway, VERSION: 5.0.0}
+      args: {SERVICE: gateway, VERSION: 5.0.1}
     environment:
       SENTINELFLOW_DATABASE_URL: postgres://sentinelflow:${POSTGRES_PASSWORD:-sentinelflow}@postgres:5432/sentinelflow?sslmode=disable
-      REDIS_URL: redis://redis:6379
+      SENTINELFLOW_REDIS_URL: redis://redis:6379
       SENTINELFLOW_ENV: production
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
@@ -18,7 +18,7 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile
-      args: {SERVICE: controlplane, VERSION: 5.0.0}
+      args: {SERVICE: controlplane, VERSION: 5.0.1}
     environment:
       SENTINELFLOW_DATABASE_URL: postgres://sentinelflow:${POSTGRES_PASSWORD:-sentinelflow}@postgres:5432/sentinelflow?sslmode=disable
       SENTINELFLOW_ENV: production
@@ -29,10 +29,10 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile
-      args: {SERVICE: worker, VERSION: 5.0.0}
+      args: {SERVICE: worker, VERSION: 5.0.1}
     environment:
       SENTINELFLOW_DATABASE_URL: postgres://sentinelflow:${POSTGRES_PASSWORD:-sentinelflow}@postgres:5432/sentinelflow?sslmode=disable
-      REDIS_URL: redis://redis:6379
+      SENTINELFLOW_REDIS_URL: redis://redis:6379
       SENTINELFLOW_ENV: production
     depends_on:
       postgres: {condition: service_healthy}

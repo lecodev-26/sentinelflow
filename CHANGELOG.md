@@ -1,3 +1,13 @@
+## [5.0.1] - 2026-10-07
+
+### Fixed
+- Hardened the public release packaging and runtime version metadata.
+- Corrected Docker Compose Redis configuration to use `SENTINELFLOW_REDIS_URL`.
+- Release builds now inject version metadata into `internal/version`.
+
+### Security
+- Release artifacts are built and attested by the GitHub Actions release pipeline.
+
 ## [5.0.0] - 2026-09-28
 
 ### Added
