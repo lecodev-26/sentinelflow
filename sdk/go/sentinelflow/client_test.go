@@ -10,6 +10,12 @@ import (
 	"time"
 )
 
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) {
+	return f(r)
+}
+
 func TestNewConfiguresClient(t *testing.T) {
 	c := New("https://example.com/", "k")
 	if c.BaseURL != "https://example.com" {
@@ -105,7 +111,7 @@ func TestChatStream(t *testing.T) {
 			t.Error("missing stream accept header")
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
-		_, _ = w.Write([]byte("data: first\\n\\ndata: second\\n\\ndata: [DONE]\\n\\n"))
+		_, _ = w.Write([]byte("data: first\n\ndata: second\n\ndata: [DONE]\n\n"))
 	}))
 	defer s.Close()
 
@@ -126,7 +132,7 @@ func TestChatStreamCallbackError(t *testing.T) {
 	want := errors.New("stop")
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
-		_, _ = w.Write([]byte("data: first\\n\\n"))
+		_, _ = w.Write([]byte("data: first\n\n"))
 	}))
 	defer s.Close()
 
@@ -139,15 +145,17 @@ func TestChatStreamCallbackError(t *testing.T) {
 }
 
 func TestContextCancellation(t *testing.T) {
-	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c := New("https://example.com", "k")
+	c.HTTPClient = &http.Client{Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		<-r.Context().Done()
-	}))
-	defer s.Close()
+		return nil, r.Context().Err()
+	})}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
-	_, err := New(s.URL, "k").Chat(ctx, ChatRequest{Model: "m"})
-	if err == nil {
-		t.Fatal("expected context cancellation")
+
+	_, err := c.Chat(ctx, ChatRequest{Model: "m"})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected context deadline, got %v", err)
 	}
 }
