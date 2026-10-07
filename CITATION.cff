@@ -4,7 +4,7 @@ type: software
 abstract: "Production-oriented AI Gateway, intelligent router, policy engine and control plane for multi-provider LLM infrastructure."
 repository-code: "https://github.com/lecodev-26/sentinelflow"
 license: MIT
-version: 5.0.0
+version: 5.0.1
 url: "https://github.com/lecodev-26/sentinelflow"
 authors:
   - family-names: "lecodev-26"

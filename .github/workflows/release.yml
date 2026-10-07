@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
   attestations: write
 
@@ -42,7 +42,7 @@ jobs:
           for service in gateway controlplane worker cli migrator; do
             CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
               go build -trimpath \
-                -ldflags "-s -w -X main.version=$VERSION -X main.commit=$COMMIT" \
+                -ldflags "-s -w -X github.com/lecodev-26/sentinelflow/internal/version.Version=$VERSION -X github.com/lecodev-26/sentinelflow/internal/version.Commit=$COMMIT" \
                 -o "dist/linux-amd64/$service" "./cmd/$service"
           done
           tar -C dist -czf "dist/sentinelflow-$VERSION-linux-amd64.tar.gz" linux-amd64
@@ -56,10 +56,20 @@ jobs:
           for service in gateway controlplane worker cli migrator; do
             CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
               go build -trimpath \
-                -ldflags "-s -w -X main.version=$VERSION -X main.commit=$COMMIT" \
+                -ldflags "-s -w -X github.com/lecodev-26/sentinelflow/internal/version.Version=$VERSION -X github.com/lecodev-26/sentinelflow/internal/version.Commit=$COMMIT" \
                 -o "dist/linux-arm64/$service" "./cmd/$service"
           done
           tar -C dist -czf "dist/sentinelflow-$VERSION-linux-arm64.tar.gz" linux-arm64
+
+      - name: Verify release metadata
+        run: |
+          VERSION_OUTPUT="$(./dist/linux-amd64/cli --version)"
+          echo "$VERSION_OUTPUT"
+          echo "$VERSION_OUTPUT" | grep -F "sfctl $VERSION"
+          echo "$VERSION_OUTPUT" | grep -F "${COMMIT:0:7}"
+        env:
+          VERSION: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
 
       - name: Generate checksums
         working-directory: dist
@@ -96,3 +106,14 @@ jobs:
         with:
           subject-path: dist/sentinelflow-source-sbom.spdx.json
           sbom-path: dist/sentinelflow-source-sbom.spdx.json
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "SentinelFlow $GITHUB_REF_NAME" \
+            --generate-notes \
+            dist/*.tar.gz \
+            dist/SHA256SUMS \
+            dist/*.spdx.json
