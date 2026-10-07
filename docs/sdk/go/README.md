@@ -21,12 +21,12 @@ import (
 )
 
 func main() {
-    client, err := sentinelflow.New(sentinelflow.Config{BaseURL: "http://localhost:8080", APIKey: "your-api-key"})
+    client := sentinelflow.New("http://localhost:8080", "your-api-key")
     if err != nil {
         panic(err)
     }
 
-    response, err := client.Chat(context.Background(), sentinelflow.ChatRequest{Model: "default", Input: "Hello SentinelFlow"})
+    response, err := client.Chat(context.Background(), sentinelflow.ChatRequest{Model: "default", Messages: []sentinelflow.Message{{Role: "user", Content: "Hello SentinelFlow"}}})
     if err != nil {
         panic(err)
     }
@@ -40,11 +40,20 @@ func main() {
 Use `ChatStream` when `ChatRequest.Stream` is enabled. The callback receives each raw SSE event payload.
 
 ```go
-err := client.ChatStream(ctx, sentinelflow.ChatRequest{Model: "default", Input: "Hello", Stream: true}, func(event []byte) error {
-    fmt.Println(string(event))
+err := client.ChatStream(ctx, sentinelflow.ChatRequest{Model: "default", Messages: []sentinelflow.Message{{Role: "user", Content: "Hello"}}}, func(event sentinelflow.StreamEvent) error {
+    fmt.Println(event.Data)
     return nil
 })
 ```
+
+## API surface
+
+- `New` creates a client with a 60-second default HTTP timeout.
+- `Chat` calls `/v1/chat/completions`.
+- `ChatStream` calls `/v1/chat/completions` using SSE.
+- `Responses` calls `/v1/responses`.
+- `Models` calls `/v1/models`.
+- `Error` exposes HTTP status, error type and message from API failures.
 
 ## Versioning
 

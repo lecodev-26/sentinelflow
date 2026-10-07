@@ -8,11 +8,11 @@ import (
 )
 
 func main() {
-	client, err := sentinelflow.New(sentinelflow.Config{BaseURL: "http://localhost:8080", APIKey: "your-api-key"})
+	client := sentinelflow.New("http://localhost:8080", "your-api-key")
 	if err != nil {
 		panic(err)
 	}
-	response, err := client.Chat(context.Background(), sentinelflow.ChatRequest{Model: "default", Input: "Hello SentinelFlow"})
+	response, err := client.Chat(context.Background(), sentinelflow.ChatRequest{Model: "default", Messages: []sentinelflow.Message{{Role: "user", Content: "Hello SentinelFlow"}}})
 	if err != nil {
 		panic(err)
 	}
