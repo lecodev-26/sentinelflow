@@ -24,7 +24,7 @@ SentinelFlow sits between applications and AI providers and turns a collection o
 
 It provides one gateway for authentication, tenant isolation, policy enforcement, routing, provider failover, usage accounting, security controls, events, audit and operations.
 
-> **Project status:** V5.0.1 is the current maintenance release on the V5 GA line. Production deployment still requires environment-specific PostgreSQL/Redis, provider credentials, identity configuration and operational verification. See [production readiness](docs/v5/ga/production-readiness.md).
+> **Project status:** V5.0.1 is the latest published stable release. V6 is active development on the separate `v6` branch; `main` remains the stable release line. Production deployment still requires environment-specific PostgreSQL/Redis, provider credentials, identity configuration and operational verification. See [production readiness](docs/v5/ga/production-readiness.md).
 
 ## V5.0.1
 
@@ -166,7 +166,7 @@ sdk/
 └── python/
 ```
 
-See [SDK documentation](sdk/README.md).
+See [SDK documentation](sdk/README.md). The public Go module is available as `github.com/lecodev-26/sentinelflow/sdk/go@v0.1.1`.
 
 ## Repository map
 

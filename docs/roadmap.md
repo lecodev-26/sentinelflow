@@ -1,6 +1,6 @@
 # SentinelFlow Roadmap
 
-## V5.0.0 — current GA
+## V5.0.1 — current published GA maintenance release
 
 V5 adds intelligent AI execution capabilities on top of the V4 enterprise foundation:
 
@@ -17,7 +17,11 @@ V5 adds intelligent AI execution capabilities on top of the V4 enterprise founda
 - learning signals and Zero Trust AI
 - capacity/autoscaling foundations
 
-See [V5 architecture](v5/ARCHITECTURE.md), [V5 GA](v5/ga/GA.md), and [production readiness](v5/ga/production-readiness.md).
+The latest published V5 release is **V5.0.1**. See [V5 architecture](v5/ARCHITECTURE.md), [V5 GA](v5/ga/GA.md), and [production readiness](v5/ga/production-readiness.md).
+
+## V6 — active development
+
+V6 development happens on the `v6` branch and remains separate from stable `main`.
 
 ## Beyond V5
 

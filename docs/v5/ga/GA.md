@@ -17,7 +17,7 @@ SentinelFlow V5 is the current release line. It preserves the enterprise gateway
 
 ## Release boundary
 
-V5.0.0 was the initial GA software release. The current maintenance line must be released from the hardened post-GA branch rather than reusing the original V5.0.0 tag.
+V5.0.0 was the initial GA software release. **V5.0.1 is the current published maintenance release.**
 
 Production operation still requires environment-specific PostgreSQL/Redis, provider credentials, identity configuration, secret management, backups, monitoring, load testing and operational verification.
 

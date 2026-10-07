@@ -22,7 +22,7 @@
 - Dedicated V5 CI, regression harness and release documentation.
 
 ### Release status
-- V5.0.0 is the current GA release line.
+- V5.0.1 is the current published GA maintenance release.
 - Production deployment remains environment-specific; follow the V5 production-readiness checklist before operating at scale.
 
 ## [4.0.0] - 2026-09-28
