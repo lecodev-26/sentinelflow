@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ci-\${{ github.workflow }}-\${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -46,7 +46,19 @@ jobs:
       - name: Run race detector
         run: go test -race ./...
 
+      - name: Run Go SDK tests
+        working-directory: sdk/go
+        run: go test ./...
+
+      - name: Run Go SDK race detector
+        working-directory: sdk/go
+        run: go test -race ./...
+
       - name: Run go vet
+        run: go vet ./...
+
+      - name: Run Go SDK vet
+        working-directory: sdk/go
         run: go vet ./...
 
       - name: Build production binaries
@@ -73,7 +85,11 @@ jobs:
           cache: true
 
       - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
 
-      - name: Scan Go dependencies and code
+      - name: Scan main module
+        run: govulncheck ./...
+
+      - name: Scan Go SDK module
+        working-directory: sdk/go
         run: govulncheck ./...

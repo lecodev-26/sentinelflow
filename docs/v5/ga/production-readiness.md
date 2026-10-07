@@ -12,6 +12,7 @@ Before production rollout, verify:
 - Backups and restore procedures have been exercised.
 - Metrics, traces, logs, SLOs and alerting are connected to the operating environment.
 - Evaluation datasets and regression thresholds are defined for critical workloads.
-- Container/SBOM/dependency/security checks pass in CI.
+- CI passes formatting, tests, race detection, vetting, builds and Go vulnerability scanning for the server and public Go SDK.
+- The release pipeline generates the required SBOM and provenance/signing artifacts before publication.
 
 GA software status does not remove environment-specific operational responsibilities.
