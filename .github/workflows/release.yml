@@ -1,0 +1,98 @@
+name: SentinelFlow Release Build
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  build:
+    name: Build release artifacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verify release source
+        run: |
+          test -z "$(gofmt -l .)"
+          git diff --check
+          go test ./...
+          (cd sdk/go && go test ./...)
+
+      - name: Build Linux amd64
+        env:
+          VERSION: \${{ github.ref_name }}
+          COMMIT: \${{ github.sha }}
+        run: |
+          mkdir -p dist/linux-amd64
+          for service in gateway controlplane worker cli migrator; do
+            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+              go build -trimpath \
+                -ldflags "-s -w -X main.version=$VERSION -X main.commit=$COMMIT" \
+                -o "dist/linux-amd64/$service" "./cmd/$service"
+          done
+          tar -C dist -czf "dist/sentinelflow-$VERSION-linux-amd64.tar.gz" linux-amd64
+
+      - name: Build Linux arm64
+        env:
+          VERSION: \${{ github.ref_name }}
+          COMMIT: \${{ github.sha }}
+        run: |
+          mkdir -p dist/linux-arm64
+          for service in gateway controlplane worker cli migrator; do
+            CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
+              go build -trimpath \
+                -ldflags "-s -w -X main.version=$VERSION -X main.commit=$COMMIT" \
+                -o "dist/linux-arm64/$service" "./cmd/$service"
+          done
+          tar -C dist -czf "dist/sentinelflow-$VERSION-linux-arm64.tar.gz" linux-arm64
+
+      - name: Generate checksums
+        working-directory: dist
+        run: sha256sum *.tar.gz > SHA256SUMS
+
+      - name: Generate source SBOM
+        uses: anchore/sbom-action@v0.20.4
+        with:
+          path: .
+          format: spdx-json
+          output-file: dist/sentinelflow-source-sbom.spdx.json
+          upload-artifact: true
+          upload-release-assets: false
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sentinelflow-release-\${{ github.ref_name }}
+          path: |
+            dist/*.tar.gz
+            dist/SHA256SUMS
+            dist/*.spdx.json
+            dist/linux-amd64/*
+            dist/linux-arm64/*
+          if-no-files-found: error
+
+      - name: Attest release archives
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/*.tar.gz
+
+      - name: Attest source SBOM
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/sentinelflow-source-sbom.spdx.json
+          sbom-path: dist/sentinelflow-source-sbom.spdx.json
