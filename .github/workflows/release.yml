@@ -35,8 +35,8 @@ jobs:
 
       - name: Build Linux amd64
         env:
-          VERSION: \${{ github.ref_name }}
-          COMMIT: \${{ github.sha }}
+          VERSION: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
         run: |
           mkdir -p dist/linux-amd64
           for service in gateway controlplane worker cli migrator; do
@@ -49,8 +49,8 @@ jobs:
 
       - name: Build Linux arm64
         env:
-          VERSION: \${{ github.ref_name }}
-          COMMIT: \${{ github.sha }}
+          VERSION: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
         run: |
           mkdir -p dist/linux-arm64
           for service in gateway controlplane worker cli migrator; do
@@ -87,7 +87,7 @@ jobs:
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: sentinelflow-release-\${{ github.ref_name }}
+          name: sentinelflow-release-${{ github.ref_name }}
           path: |
             dist/*.tar.gz
             dist/SHA256SUMS
