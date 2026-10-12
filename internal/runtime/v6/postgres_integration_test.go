@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/lecodev-26/sentinelflow/internal/events"
 )
 
 func integrationStore(t *testing.T) (*pgxpool.Pool, *PostgresStore, context.Context) {
@@ -230,5 +231,91 @@ func TestPostgresStore_ConcurrentClaimsAndLeaseRecovery(t *testing.T) {
 	}
 	if status != string(TaskRetrying) || owner != "" || leaseUntil != nil {
 		t.Fatalf("recovered lease state status=%q owner=%q until=%v", status, owner, leaseUntil)
+	}
+}
+
+func TestPostgresStore_ExecutionEventIsPublishedFromOutbox(t *testing.T) {
+	pool, store, ctx := integrationStore(t)
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	tenant, runID := "it-publish-"+suffix, "it-run-"+suffix
+	eventID := "it-event-publish-" + suffix
+	cleanupRun(t, ctx, pool, tenant, runID)
+	t.Cleanup(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, err := pool.Exec(cleanupCtx, `DELETE FROM outbox_events WHERE event_id=$1`, eventID); err != nil {
+			t.Errorf("cleanup integration outbox event: %v", err)
+		}
+	})
+	if err := store.CreateRun(ctx, integrationRun(tenant, runID)); err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+
+	bus := events.NewInMemoryBus()
+	if err := bus.Start(ctx); err != nil {
+		t.Fatalf("start event bus: %v", err)
+	}
+	defer func() { _ = bus.Stop() }()
+	received := make(chan events.Event, 1)
+	const eventType = "task.completed"
+	if err := bus.Subscribe(eventType, events.NewConsumer("runtime-v6-integration", func(_ context.Context, event events.Event) {
+		select {
+		case received <- event:
+		default:
+		}
+	})); err != nil {
+		t.Fatalf("subscribe to event bus: %v", err)
+	}
+
+	executionEvent := ExecutionEvent{
+		ID: eventID, SchemaVersion: 1, TenantID: tenant, RunID: runID,
+		CorrelationID: "corr-" + runID, Type: eventType,
+		Metadata: map[string]string{"source": "runtime-v6-integration"},
+	}
+	if err := store.AppendExecutionEvent(ctx, executionEvent); err != nil {
+		t.Fatalf("append execution event: %v", err)
+	}
+
+	cfg := events.DefaultOutboxConfig()
+	cfg.PollInterval = 25 * time.Millisecond
+	cfg.BatchSize = 10
+	cfg.StuckThreshold = time.Minute
+	publisher := events.NewOutbox(pool, bus, cfg)
+	publisherCtx, cancelPublisher := context.WithCancel(ctx)
+	defer cancelPublisher()
+	go func() { _ = publisher.Run(publisherCtx) }()
+
+	select {
+	case got := <-received:
+		if got.ID != eventID || got.Type != eventType || got.TenantID != tenant {
+			t.Fatalf("published event identity mismatch: %#v", got)
+		}
+		if got.Payload["run_id"] != runID || got.Payload["correlation_id"] != executionEvent.CorrelationID {
+			t.Fatalf("published event payload mismatch: %#v", got.Payload)
+		}
+		metadata, ok := got.Payload["metadata"].(map[string]interface{})
+		if !ok || metadata["source"] != "runtime-v6-integration" {
+			t.Fatalf("published event metadata mismatch: %#v", got.Payload["metadata"])
+		}
+	case <-ctx.Done():
+		t.Fatalf("timed out waiting for outbox delivery: %v", ctx.Err())
+	case <-time.After(8 * time.Second):
+		t.Fatal("timed out waiting for outbox delivery")
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		var status string
+		err := pool.QueryRow(ctx, `SELECT status FROM outbox_events WHERE event_id=$1`, eventID).Scan(&status)
+		if err != nil {
+			t.Fatalf("read outbox status: %v", err)
+		}
+		if status == "published" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("outbox status = %q, want published", status)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
