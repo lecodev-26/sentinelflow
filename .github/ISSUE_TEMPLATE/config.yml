@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Contribute to SentinelFlow
+    url: https://github.com/lecodev-26/sentinelflow/blob/main/CONTRIBUTING.md
+    about: Contributions are welcome. Read how to choose an issue, run tests, and submit a pull request.
   - name: Security vulnerability
     url: https://github.com/lecodev-26/sentinelflow/security/advisories/new
     about: Report security vulnerabilities privately.

@@ -1,5 +1,7 @@
 # SentinelFlow Documentation
 
+> **Contributions are welcome.** [Read the contribution guide](../CONTRIBUTING.md) for how to pick an issue, run checks, and submit a pull request.
+
 - [Quickstart](quickstart.md)
 - [Deployment](deployment.md)
 - [Architecture](architecture.md)

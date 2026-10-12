@@ -1,5 +1,7 @@
 # SentinelFlow SDKs
 
+> **Want to improve an SDK?** Contributions are welcome. Please read the [contribution guide](../CONTRIBUTING.md), add tests for behavior changes, and open a pull request against the agreed development branch.
+
 Official client SDKs for the SentinelFlow gateway.
 
 - [Go SDK](go/README.md)

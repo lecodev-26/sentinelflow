@@ -1,5 +1,7 @@
 # Support
 
+**Want to help improve SentinelFlow? Contributions are welcome.** Read [CONTRIBUTING.md](CONTRIBUTING.md) and browse [open issues](https://github.com/lecodev-26/sentinelflow/issues) before opening a pull request.
+
 For usage questions:
 
 1. Read the README.
