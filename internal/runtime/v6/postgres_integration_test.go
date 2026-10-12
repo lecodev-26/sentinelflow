@@ -88,6 +88,54 @@ func TestPostgresStore_RunTenantScopeAndTransitions(t *testing.T) {
 	}
 }
 
+func TestPostgresStore_RetryEventAndOutboxAreAtomic(t *testing.T) {
+	pool, store, ctx := integrationStore(t)
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	tenant, runID, taskID := "it-retry-"+suffix, "it-run-"+suffix, "it-task-"+suffix
+	eventID := "it-event-" + suffix
+	cleanupRun(t, ctx, pool, tenant, runID)
+	t.Cleanup(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_, err := pool.Exec(cleanupCtx, `DELETE FROM outbox_events WHERE event_id=$1`, eventID)
+		if err != nil {
+			t.Errorf("cleanup integration outbox event: %v", err)
+		}
+	})
+	if err := store.CreateRun(ctx, integrationRun(tenant, runID)); err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	if err := store.CreateTask(ctx, integrationTask(tenant, runID, taskID)); err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+	claimed, err := store.ClaimTask(ctx, tenant, "retry-worker", time.Minute)
+	if err != nil {
+		t.Fatalf("claim task: %v", err)
+	}
+	event := ExecutionEvent{ID: eventID, SchemaVersion: 1, TenantID: tenant, RunID: runID, TaskID: taskID, CorrelationID: claimed.CorrelationID, Type: "task.retrying", Metadata: map[string]string{"attempt": "1"}}
+	if err := store.RetryTaskWithEvent(ctx, tenant, taskID, "retry-worker", time.Second, "handler_failed", event); err != nil {
+		t.Fatalf("retry task with event: %v", err)
+	}
+	var status, owner string
+	var leaseUntil *time.Time
+	if err := pool.QueryRow(ctx, `SELECT status,lease_owner,lease_until FROM v6_tasks WHERE tenant_id=$1 AND id=$2`, tenant, taskID).Scan(&status, &owner, &leaseUntil); err != nil {
+		t.Fatal(err)
+	}
+	if status != string(TaskRetrying) || owner != "" || leaseUntil != nil {
+		t.Fatalf("unexpected retry state status=%q owner=%q until=%v", status, owner, leaseUntil)
+	}
+	var lineageType, outboxType, outboxStatus string
+	if err := pool.QueryRow(ctx, `SELECT event_type FROM v6_execution_events WHERE id=$1 AND tenant_id=$2`, eventID, tenant).Scan(&lineageType); err != nil {
+		t.Fatalf("read retry lineage: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT event_type,status FROM outbox_events WHERE event_id=$1 AND tenant_id=$2`, eventID, tenant).Scan(&outboxType, &outboxStatus); err != nil {
+		t.Fatalf("read retry outbox: %v", err)
+	}
+	if lineageType != "task.retrying" || outboxType != lineageType || outboxStatus != "pending" {
+		t.Fatalf("unexpected retry events lineage=%q outbox=%q status=%q", lineageType, outboxType, outboxStatus)
+	}
+}
+
 func TestPostgresStore_ConcurrentClaimsAndLeaseRecovery(t *testing.T) {
 	pool, store, ctx := integrationStore(t)
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())

@@ -203,6 +203,65 @@ WHERE tenant_id=$1 AND id=$2 AND status='running' AND lease_owner=$3 AND lease_u
 	return nil
 }
 
+// RetryTaskWithEvent atomically relinquishes a live lease, schedules the next
+// bounded attempt (or marks terminal failure), and persists the matching lineage
+// event plus outbox delivery intent. The caller chooses the event type based on
+// whether another attempt remains.
+func (s *PostgresStore) RetryTaskWithEvent(ctx context.Context, tenantID, taskID, workerID string, backoff time.Duration, errorCode string, event ExecutionEvent) error {
+	if tenantID == "" || taskID == "" || workerID == "" || backoff < 0 {
+		return fmt.Errorf("tenant, task, worker and non-negative backoff are required")
+	}
+	if event.ID == "" || event.SchemaVersion == 0 || event.Type == "" {
+		return fmt.Errorf("event id, schema version and type are required")
+	}
+	metadata, err := json.Marshal(event.Metadata)
+	if err != nil {
+		return fmt.Errorf("marshal retry event metadata: %w", err)
+	}
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("begin task retry: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	now := time.Now().UTC()
+	tag, err := tx.Exec(ctx, `UPDATE v6_tasks SET
+status=CASE WHEN attempt < max_attempts THEN 'retrying' ELSE 'failed' END,
+available_at=NOW()+$4::interval,updated_at=NOW(),
+finished_at=CASE WHEN attempt < max_attempts THEN NULL ELSE NOW() END,
+error_code=$5,lease_owner='',lease_until=NULL
+WHERE tenant_id=$1 AND id=$2 AND status='running' AND lease_owner=$3 AND lease_until>NOW() AND attempt<=max_attempts`,
+		tenantID, taskID, workerID, fmt.Sprintf("%f seconds", backoff.Seconds()), errorCode)
+	if err != nil {
+		return fmt.Errorf("schedule task retry: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrConflict
+	}
+	var runID, correlationID string
+	if err := tx.QueryRow(ctx, `SELECT run_id,correlation_id FROM v6_tasks WHERE tenant_id=$1 AND id=$2`, tenantID, taskID).Scan(&runID, &correlationID); err != nil {
+		return fmt.Errorf("load retried task lineage: %w", err)
+	}
+	if (event.TenantID != "" && event.TenantID != tenantID) || (event.TaskID != "" && event.TaskID != taskID) || (event.RunID != "" && event.RunID != runID) || (event.CorrelationID != "" && event.CorrelationID != correlationID) {
+		return fmt.Errorf("event tenant/run/task/correlation does not match retried task")
+	}
+	event.TenantID, event.RunID, event.TaskID, event.CorrelationID = tenantID, runID, taskID, correlationID
+	if event.OccurredAt.IsZero() {
+		event.OccurredAt = now
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO v6_execution_events
+(id,schema_version,tenant_id,run_id,task_id,correlation_id,event_type,occurred_at,principal_id,policy_version,metadata)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, event.ID, event.SchemaVersion, event.TenantID, event.RunID, event.TaskID, event.CorrelationID, event.Type, event.OccurredAt, event.PrincipalID, event.PolicyVersion, metadata); err != nil {
+		return fmt.Errorf("append retry event: %w", err)
+	}
+	if err := enqueueExecutionEventOutbox(ctx, tx, event, event.OccurredAt); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit task retry: %w", err)
+	}
+	return nil
+}
+
 // RecoverExpiredLeases moves expired running tasks to retrying or failed, based
 // on the bounded attempt count. It is safe to run concurrently on many workers.
 func (s *PostgresStore) RecoverExpiredLeases(ctx context.Context) (int64, error) {

@@ -110,14 +110,18 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 			status = TaskRetrying
 		}
 	}
+	if event.ID == "" {
+		return fmt.Errorf("handler must return an execution event with a stable ID, including on failure")
+	}
 	if status == TaskRetrying {
-		// Retry eligibility is durable and bounded; backoff avoids hot-looping
-		// a failing dependency. A subsequent claim increments the attempt.
+		// Retry eligibility, lineage and outbox intent commit together. A
+		// subsequent claim increments the attempt; consumers deduplicate by ID.
 		backoff := time.Duration(task.Attempt) * time.Second
 		if backoff > time.Minute {
 			backoff = time.Minute
 		}
-		if err := w.Store.RetryTask(ctx, w.TenantID, task.ID, w.WorkerID, backoff, errorCode); err != nil {
+		event.Type = "task.retrying"
+		if err := w.Store.RetryTaskWithEvent(ctx, w.TenantID, task.ID, w.WorkerID, backoff, errorCode, event); err != nil {
 			return err
 		}
 		return nil
@@ -126,9 +130,6 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 		event.Type = "task.failed"
 	} else {
 		event.Type = "task.succeeded"
-	}
-	if event.ID == "" {
-		return fmt.Errorf("handler must return an execution event with a stable ID")
 	}
 	if err := w.Store.CompleteTaskWithEvent(ctx, w.TenantID, task.ID, w.WorkerID, status, errorCode, event); err != nil {
 		return err
