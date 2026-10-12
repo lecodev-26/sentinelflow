@@ -14,17 +14,16 @@ The Go package `internal/runtime/v6` defines:
 
 The models are deliberately storage-agnostic so persistence and worker implementations can be tested against the same invariants.
 
-The first PostgreSQL slice adds migration `0019_v6_runtime.sql` and `PostgresStore` methods to create/read runs, perform compare-and-set Run/Task transitions, claim eligible tasks with `FOR UPDATE SKIP LOCKED`, renew only a live lease held by the current worker, and recover expired leases into a bounded retry or terminal failure. Tenant IDs scope all reads and state mutations; composite foreign keys prevent cross-tenant Run/Task/Artifact/Event relationships. Payloads remain external references.
+The PostgreSQL slice adds migration `0019_v6_runtime.sql` and `PostgresStore` methods to create/read runs, perform compare-and-set Run/Task transitions, claim eligible tasks with `FOR UPDATE SKIP LOCKED`, renew only a live lease held by the current worker, and recover expired leases into a bounded retry or terminal failure. Artifact references and immutable execution events can be persisted and queried. `CompleteTaskWithEvent` fences terminal completion to the current live lease owner and atomically commits the task transition with its lineage event. Tenant IDs scope all reads and state mutations; composite foreign keys prevent cross-tenant Run/Task/Artifact/Event relationships. Payloads remain external references.
 
-This is not yet a complete transactional execution API: artifact/event write methods, atomic state-change plus outbox event commits, worker-loop integration, and real PostgreSQL concurrency tests remain to be implemented.
+This is not yet a complete production execution API: durable external event delivery/outbox integration, worker-loop integration, production-role RLS validation, and live PostgreSQL integration execution remain open.
 
 ## Next implementation slices
 
-1. Complete repository operations for artifacts and immutable lifecycle events, including atomic state-change plus outbox writes.
-2. Integrate the store with a worker loop and define cancellation and stale-worker fencing semantics for external side effects.
-3. Add an outbox/inbox strategy for event delivery and duplicate handling.
-4. Add PostgreSQL integration tests for process interruption, concurrent claims, lease renewal/expiry, retries, duplicate delivery, and tenant isolation.
-5. Add query APIs and tracing/audit lineage for execution inspection.
+1. Integrate the store with a worker loop and define cancellation and stale-worker fencing semantics for external side effects.
+2. Add an outbox/inbox strategy for durable event delivery and duplicate handling.
+3. Run PostgreSQL integration tests against a live database, including process interruption, lease renewal/expiry, retries, duplicate delivery, and tenant isolation under the intended database role/RLS policy.
+4. Add query APIs and tracing/audit lineage for execution inspection.
 
 ## Safety and correctness constraints
 

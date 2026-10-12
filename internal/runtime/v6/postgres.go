@@ -200,3 +200,153 @@ func nullTime(t time.Time) any {
 	}
 	return t
 }
+
+// CreateArtifact stores an immutable reference to externally stored artifact
+// bytes. The composite foreign keys enforce tenant ownership of the run/task.
+func (s *PostgresStore) CreateArtifact(ctx context.Context, artifact Artifact) error {
+	if artifact.ID == "" || artifact.TenantID == "" || artifact.RunID == "" || artifact.Kind == "" || artifact.StorageRef == "" || artifact.CreatedBy == "" {
+		return fmt.Errorf("artifact id, tenant, run, kind, storage reference and creator are required")
+	}
+	createdAt := artifact.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
+	}
+	_, err := s.pool.Exec(ctx, `INSERT INTO v6_artifacts
+(id,tenant_id,run_id,task_id,kind,media_type,storage_ref,checksum,created_at,created_by,policy_version)
+VALUES ($1,$2,$3,NULLIF($4,''),$5,$6,$7,$8,$9,$10,$11)`, artifact.ID, artifact.TenantID, artifact.RunID, artifact.TaskID, artifact.Kind, artifact.MediaType, artifact.StorageRef, artifact.Checksum, createdAt, artifact.CreatedBy, artifact.PolicyVersion)
+	if err != nil {
+		return fmt.Errorf("create artifact: %w", err)
+	}
+	return nil
+}
+
+// GetArtifact never resolves the external storage reference; callers must apply
+// their authorization policy before fetching artifact bytes.
+func (s *PostgresStore) GetArtifact(ctx context.Context, tenantID, id string) (Artifact, error) {
+	var a Artifact
+	err := s.pool.QueryRow(ctx, `SELECT id,tenant_id,run_id,COALESCE(task_id,''),kind,media_type,storage_ref,checksum,created_at,created_by,policy_version
+FROM v6_artifacts WHERE tenant_id=$1 AND id=$2`, tenantID, id).Scan(&a.ID, &a.TenantID, &a.RunID, &a.TaskID, &a.Kind, &a.MediaType, &a.StorageRef, &a.Checksum, &a.CreatedAt, &a.CreatedBy, &a.PolicyVersion)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Artifact{}, ErrNotFound
+	}
+	if err != nil {
+		return Artifact{}, fmt.Errorf("get artifact: %w", err)
+	}
+	return a, nil
+}
+
+// AppendExecutionEvent appends an immutable execution-lineage event. It does
+// not publish externally; delivery requires an outbox transaction.
+func (s *PostgresStore) AppendExecutionEvent(ctx context.Context, event ExecutionEvent) error {
+	if event.ID == "" || event.SchemaVersion == 0 || event.TenantID == "" || event.RunID == "" || event.CorrelationID == "" || event.Type == "" {
+		return fmt.Errorf("event id, schema version, tenant, run, correlation id and type are required")
+	}
+	occurredAt := event.OccurredAt
+	if occurredAt.IsZero() {
+		occurredAt = time.Now().UTC()
+	}
+	metadata, err := json.Marshal(event.Metadata)
+	if err != nil {
+		return fmt.Errorf("marshal event metadata: %w", err)
+	}
+	_, err = s.pool.Exec(ctx, `INSERT INTO v6_execution_events
+(id,schema_version,tenant_id,run_id,task_id,correlation_id,event_type,occurred_at,principal_id,policy_version,metadata)
+VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7,$8,$9,$10,$11)`, event.ID, event.SchemaVersion, event.TenantID, event.RunID, event.TaskID, event.CorrelationID, event.Type, occurredAt, event.PrincipalID, event.PolicyVersion, metadata)
+	if err != nil {
+		return fmt.Errorf("append execution event: %w", err)
+	}
+	return nil
+}
+
+// ListExecutionEvents returns a run's immutable lineage in occurrence order.
+func (s *PostgresStore) ListExecutionEvents(ctx context.Context, tenantID, runID string, limit int) ([]ExecutionEvent, error) {
+	if tenantID == "" || runID == "" {
+		return nil, fmt.Errorf("tenant and run are required")
+	}
+	if limit <= 0 || limit > 1000 {
+		limit = 100
+	}
+	rows, err := s.pool.Query(ctx, `SELECT id,schema_version,tenant_id,run_id,COALESCE(task_id,''),correlation_id,event_type,occurred_at,principal_id,policy_version,metadata
+FROM v6_execution_events WHERE tenant_id=$1 AND run_id=$2 ORDER BY occurred_at,id LIMIT $3`, tenantID, runID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list execution events: %w", err)
+	}
+	defer rows.Close()
+	events := make([]ExecutionEvent, 0)
+	for rows.Next() {
+		var event ExecutionEvent
+		var metadata []byte
+		if err := rows.Scan(&event.ID, &event.SchemaVersion, &event.TenantID, &event.RunID, &event.TaskID, &event.CorrelationID, &event.Type, &event.OccurredAt, &event.PrincipalID, &event.PolicyVersion, &metadata); err != nil {
+			return nil, fmt.Errorf("scan execution event: %w", err)
+		}
+		if err := json.Unmarshal(metadata, &event.Metadata); err != nil {
+			return nil, fmt.Errorf("decode execution event metadata: %w", err)
+		}
+		events = append(events, event)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate execution events: %w", err)
+	}
+	return events, nil
+}
+
+// CompleteTaskWithEvent fences completion to the worker that currently owns a
+// live lease and commits the terminal transition plus lineage event atomically.
+// External side effects still need their own idempotency/reconciliation.
+func (s *PostgresStore) CompleteTaskWithEvent(ctx context.Context, tenantID, taskID, workerID string, to TaskStatus, errorCode string, event ExecutionEvent) error {
+	if to != TaskSucceeded && to != TaskFailed && to != TaskCancelled {
+		return fmt.Errorf("completion status must be terminal")
+	}
+	if event.ID == "" || event.SchemaVersion == 0 || event.Type == "" {
+		return fmt.Errorf("event id, schema version and type are required")
+	}
+	metadata, err := json.Marshal(event.Metadata)
+	if err != nil {
+		return fmt.Errorf("marshal event metadata: %w", err)
+	}
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("begin task completion: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	now := time.Now().UTC()
+	tag, err := tx.Exec(ctx, `UPDATE v6_tasks SET status=$4,updated_at=$5,finished_at=$5,error_code=$6,lease_owner='',lease_until=NULL
+WHERE tenant_id=$1 AND id=$2 AND status='running' AND lease_owner=$3 AND lease_until>NOW()`, tenantID, taskID, workerID, string(to), now, errorCode)
+	if err != nil {
+		return fmt.Errorf("complete task: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrConflict
+	}
+	var runID, correlationID string
+	if err := tx.QueryRow(ctx, `SELECT run_id,correlation_id FROM v6_tasks WHERE tenant_id=$1 AND id=$2`, tenantID, taskID).Scan(&runID, &correlationID); err != nil {
+		return fmt.Errorf("load completed task lineage: %w", err)
+	}
+	if event.TenantID != "" && event.TenantID != tenantID || event.TaskID != "" && event.TaskID != taskID || event.RunID != "" && event.RunID != runID {
+		return fmt.Errorf("event tenant/run/task does not match completed task")
+	}
+	if event.TenantID == "" {
+		event.TenantID = tenantID
+	}
+	if event.RunID == "" {
+		event.RunID = runID
+	}
+	if event.TaskID == "" {
+		event.TaskID = taskID
+	}
+	if event.CorrelationID == "" {
+		event.CorrelationID = correlationID
+	}
+	if event.OccurredAt.IsZero() {
+		event.OccurredAt = now
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO v6_execution_events
+(id,schema_version,tenant_id,run_id,task_id,correlation_id,event_type,occurred_at,principal_id,policy_version,metadata)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, event.ID, event.SchemaVersion, event.TenantID, event.RunID, event.TaskID, event.CorrelationID, event.Type, event.OccurredAt, event.PrincipalID, event.PolicyVersion, metadata); err != nil {
+		return fmt.Errorf("append completion event: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit task completion: %w", err)
+	}
+	return nil
+}
