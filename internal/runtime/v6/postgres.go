@@ -181,6 +181,28 @@ WHERE tenant_id=$1 AND id=$2 AND status='running' AND lease_owner=$3 AND lease_u
 	return nil
 }
 
+// RetryTask relinquishes a live worker's lease and schedules another attempt.
+// The attempt count was incremented by ClaimTask; exhausted tasks are terminal.
+func (s *PostgresStore) RetryTask(ctx context.Context, tenantID, taskID, workerID string, backoff time.Duration, errorCode string) error {
+	if tenantID == "" || taskID == "" || workerID == "" || backoff < 0 {
+		return fmt.Errorf("tenant, task, worker and non-negative backoff are required")
+	}
+	tag, err := s.pool.Exec(ctx, `UPDATE v6_tasks SET
+status=CASE WHEN attempt < max_attempts THEN 'retrying' ELSE 'failed' END,
+available_at=NOW()+$4::interval,updated_at=NOW(),
+finished_at=CASE WHEN attempt < max_attempts THEN NULL ELSE NOW() END,
+error_code=$5,lease_owner='',lease_until=NULL
+WHERE tenant_id=$1 AND id=$2 AND status='running' AND lease_owner=$3 AND lease_until>NOW() AND attempt<=max_attempts`,
+		tenantID, taskID, workerID, fmt.Sprintf("%f seconds", backoff.Seconds()), errorCode)
+	if err != nil {
+		return fmt.Errorf("schedule task retry: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrConflict
+	}
+	return nil
+}
+
 // RecoverExpiredLeases moves expired running tasks to retrying or failed, based
 // on the bounded attempt count. It is safe to run concurrently on many workers.
 func (s *PostgresStore) RecoverExpiredLeases(ctx context.Context) (int64, error) {
@@ -320,7 +342,7 @@ func (s *PostgresStore) CompleteTaskWithEvent(ctx context.Context, tenantID, tas
 	}
 	defer tx.Rollback(ctx)
 	now := time.Now().UTC()
-	tag, err := tx.Exec(ctx, `UPDATE v6_tasks SET status=$4,updated_at=$5,finished_at=$5,error_code=$6,lease_owner='',lease_until=NULL
+	tag, err := tx.Exec(ctx, `UPDATE v6_tasks SET status=$4,updated_at=$5,finished_at=$5,error_code=$5,lease_owner='',lease_until=NULL
 WHERE tenant_id=$1 AND id=$2 AND status='running' AND lease_owner=$3 AND lease_until>NOW()`, tenantID, taskID, workerID, string(to), now, errorCode)
 	if err != nil {
 		return fmt.Errorf("complete task: %w", err)
