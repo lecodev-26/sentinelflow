@@ -24,9 +24,9 @@ SentinelFlow sits between applications and AI providers and turns a collection o
 
 It provides one gateway for authentication, tenant isolation, policy enforcement, routing, provider failover, usage accounting, security controls, events, audit and operations.
 
-> **Project status:** V5.0.0 is the current GA release. Production deployment still requires environment-specific PostgreSQL/Redis, provider credentials, identity configuration and operational verification. See [production readiness](docs/v5/ga/production-readiness.md).
+> **Project status:** V5.0.1 is the latest published stable release. V6 is active development on the separate `v6` branch; `main` remains the stable release line. Production deployment still requires environment-specific PostgreSQL/Redis, provider credentials, identity configuration and operational verification. See [production readiness](docs/v5/ga/production-readiness.md).
 
-## V5.0.0
+## V5.0.1
 
 > SentinelFlow V5 is the current GA release. It adds intelligent request understanding, adaptive routing, agent runtime, tools, memory/RAG, AI security, evaluation and governance. See [V5 architecture](docs/v5/ARCHITECTURE.md), [V5 roadmap](docs/v5/ROADMAP.md) and [V5 GA](docs/v5/ga/GA.md).
 
@@ -119,7 +119,7 @@ cp .env.example .env
 
 Never commit `.env` or real provider credentials.
 
-SentinelFlow V5.0.0 does **not** use the removed legacy `rules.yaml` configuration. Runtime policy belongs in the control plane/database, while production secrets should come from an external secret manager or the configured secret store.
+SentinelFlow V5 does **not** use the removed legacy `rules.yaml` configuration. Runtime policy belongs in the control plane/database, while production secrets should come from an external secret manager or the configured secret store.
 
 ### Docker Compose
 
@@ -213,9 +213,10 @@ The repository also includes CI checks for dependency verification, filesystem v
 
 - **V3:** enterprise, routing, FinOps, security, developer experience and resilience foundations.
 - **V4:** enterprise gateway/control-plane foundation.
-- **V5:** intelligent AI execution platform and current GA release.
+- **V5.0.1:** latest published stable release and current GA line.
+- **V6:** active development on the `v6` branch; not yet declared stable or GA.
 
-See [CHANGELOG.md](CHANGELOG.md) for project history and [V5 GA](docs/v5/ga/GA.md) for the current architecture milestone.
+See [CHANGELOG.md](CHANGELOG.md) for project history and [V5 GA](docs/v5/ga/GA.md) for the current stable architecture milestone.
 
 ## Contributing
 

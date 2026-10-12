@@ -1,3 +1,8 @@
+## [Unreleased — V6 development]
+
+- V6 is under active development on the `v6` branch; this section does not represent a published release.
+- Keep release notes limited to changes verified in commits and tests; no V6 GA status is implied.
+
 ## [5.0.0] - 2026-09-28
 
 ### Added
@@ -12,7 +17,7 @@
 - Dedicated V5 CI, regression harness and release documentation.
 
 ### Release status
-- V5.0.0 is the current GA release line.
+- V5.0.1 is the latest published stable release and current GA line.
 - Production deployment remains environment-specific; follow the V5 production-readiness checklist before operating at scale.
 
 ## [4.0.0] - 2026-09-28
