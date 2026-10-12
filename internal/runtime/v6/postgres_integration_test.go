@@ -136,6 +136,35 @@ func TestPostgresStore_RetryEventAndOutboxAreAtomic(t *testing.T) {
 	}
 }
 
+func TestPostgresStore_RejectsMismatchedRunTaskLineage(t *testing.T) {
+	pool, store, ctx := integrationStore(t)
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	tenant := "it-lineage-" + suffix
+	runA, runB := "it-run-a-"+suffix, "it-run-b-"+suffix
+	taskID := "it-task-" + suffix
+	cleanupRun(t, ctx, pool, tenant, runA)
+	cleanupRun(t, ctx, pool, tenant, runB)
+	if err := store.CreateRun(ctx, integrationRun(tenant, runA)); err != nil {
+		t.Fatalf("create run A: %v", err)
+	}
+	if err := store.CreateRun(ctx, integrationRun(tenant, runB)); err != nil {
+		t.Fatalf("create run B: %v", err)
+	}
+	if err := store.CreateTask(ctx, integrationTask(tenant, runA, taskID)); err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	artifact := Artifact{ID: "it-artifact-" + suffix, TenantID: tenant, RunID: runB, TaskID: taskID, Kind: "result", StorageRef: "test://artifact", CreatedBy: "integration-test"}
+	if err := store.CreateArtifact(ctx, artifact); err == nil {
+		t.Fatal("CreateArtifact accepted a task from a different run")
+	}
+
+	event := ExecutionEvent{ID: "it-event-lineage-" + suffix, SchemaVersion: 1, TenantID: tenant, RunID: runB, TaskID: taskID, CorrelationID: "corr-" + runB, Type: "task.observed"}
+	if err := store.AppendExecutionEvent(ctx, event); err == nil {
+		t.Fatal("AppendExecutionEvent accepted a task from a different run")
+	}
+}
+
 func TestPostgresStore_ConcurrentClaimsAndLeaseRecovery(t *testing.T) {
 	pool, store, ctx := integrationStore(t)
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
