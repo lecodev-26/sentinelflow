@@ -133,7 +133,9 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 	if err := w.Store.CompleteTaskWithEvent(ctx, w.TenantID, task.ID, w.WorkerID, status, errorCode, event); err != nil {
 		return err
 	}
-	return handlerErr
+	// Handler failures are represented by the durable terminal/retry state;
+	// they should not terminate the long-running worker poll loop.
+	return nil
 }
 
 func (w *Worker) validate() error {
