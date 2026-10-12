@@ -6,6 +6,7 @@
 - [Operations](operations.md)
 - [API](api.md)
 - [Roadmap](roadmap.md)
+- [V6 master roadmap & architecture](v6/ARCHITECTURE.md)
 - [V5 architecture](v5/ARCHITECTURE.md)
 - [V5 GA](v5/ga/GA.md)
 - [V5 production readiness](v5/ga/production-readiness.md)
