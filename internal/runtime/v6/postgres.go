@@ -249,11 +249,21 @@ func (s *PostgresStore) AppendExecutionEvent(ctx context.Context, event Executio
 	if err != nil {
 		return fmt.Errorf("marshal event metadata: %w", err)
 	}
-	_, err = s.pool.Exec(ctx, `INSERT INTO v6_execution_events
-(id,schema_version,tenant_id,run_id,task_id,correlation_id,event_type,occurred_at,principal_id,policy_version,metadata)
-VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7,$8,$9,$10,$11)`, event.ID, event.SchemaVersion, event.TenantID, event.RunID, event.TaskID, event.CorrelationID, event.Type, occurredAt, event.PrincipalID, event.PolicyVersion, metadata)
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
+		return fmt.Errorf("begin execution event: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `INSERT INTO v6_execution_events
+(id,schema_version,tenant_id,run_id,task_id,correlation_id,event_type,occurred_at,principal_id,policy_version,metadata)
+VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7,$8,$9,$10,$11)`, event.ID, event.SchemaVersion, event.TenantID, event.RunID, event.TaskID, event.CorrelationID, event.Type, occurredAt, event.PrincipalID, event.PolicyVersion, metadata); err != nil {
 		return fmt.Errorf("append execution event: %w", err)
+	}
+	if err := enqueueExecutionEventOutbox(ctx, tx, event, occurredAt); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit execution event: %w", err)
 	}
 	return nil
 }
@@ -322,8 +332,11 @@ WHERE tenant_id=$1 AND id=$2 AND status='running' AND lease_owner=$3 AND lease_u
 	if err := tx.QueryRow(ctx, `SELECT run_id,correlation_id FROM v6_tasks WHERE tenant_id=$1 AND id=$2`, tenantID, taskID).Scan(&runID, &correlationID); err != nil {
 		return fmt.Errorf("load completed task lineage: %w", err)
 	}
-	if event.TenantID != "" && event.TenantID != tenantID || event.TaskID != "" && event.TaskID != taskID || event.RunID != "" && event.RunID != runID {
-		return fmt.Errorf("event tenant/run/task does not match completed task")
+	if tenantID == "" || taskID == "" || workerID == "" {
+		return fmt.Errorf("tenant, task and worker are required")
+	}
+	if event.TenantID != "" && event.TenantID != tenantID || event.TaskID != "" && event.TaskID != taskID || event.RunID != "" && event.RunID != runID || event.CorrelationID != "" && event.CorrelationID != correlationID {
+		return fmt.Errorf("event tenant/run/task/correlation does not match completed task")
 	}
 	if event.TenantID == "" {
 		event.TenantID = tenantID
@@ -345,8 +358,37 @@ WHERE tenant_id=$1 AND id=$2 AND status='running' AND lease_owner=$3 AND lease_u
 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, event.ID, event.SchemaVersion, event.TenantID, event.RunID, event.TaskID, event.CorrelationID, event.Type, event.OccurredAt, event.PrincipalID, event.PolicyVersion, metadata); err != nil {
 		return fmt.Errorf("append completion event: %w", err)
 	}
+	if err := enqueueExecutionEventOutbox(ctx, tx, event, event.OccurredAt); err != nil {
+		return err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit task completion: %w", err)
+	}
+	return nil
+}
+
+// enqueueExecutionEventOutbox makes the event available to the existing
+// at-least-once event publisher in the same transaction as its lineage record.
+// Consumers must deduplicate by event ID because delivery is intentionally at-least-once.
+func enqueueExecutionEventOutbox(ctx context.Context, tx pgx.Tx, event ExecutionEvent, occurredAt time.Time) error {
+	payload, err := json.Marshal(map[string]interface{}{
+		"schema_version": event.SchemaVersion,
+		"run_id":         event.RunID,
+		"task_id":        event.TaskID,
+		"correlation_id": event.CorrelationID,
+		"principal_id":   event.PrincipalID,
+		"policy_version": event.PolicyVersion,
+		"metadata":       event.Metadata,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal execution event outbox payload: %w", err)
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO outbox_events
+(event_id,event_type,tenant_id,user_id,request_id,trace_id,payload,status,attempts,next_attempt_at,occurred_at,created_at)
+VALUES ($1,$2,$3,NULLIF($4,''),$5,$5,$6,'pending',0,NOW(),$7,NOW())
+ON CONFLICT (event_id) DO NOTHING`, event.ID, event.Type, event.TenantID, event.PrincipalID, event.CorrelationID, payload, occurredAt)
+	if err != nil {
+		return fmt.Errorf("enqueue execution event outbox: %w", err)
 	}
 	return nil
 }
