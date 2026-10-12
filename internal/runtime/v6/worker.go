@@ -120,7 +120,7 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 		if err := w.Store.RetryTask(ctx, w.TenantID, task.ID, w.WorkerID, backoff, errorCode); err != nil {
 			return err
 		}
-		return handlerErr
+		return nil
 	}
 	if status == TaskFailed {
 		event.Type = "task.failed"

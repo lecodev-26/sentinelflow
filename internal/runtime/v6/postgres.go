@@ -342,7 +342,7 @@ func (s *PostgresStore) CompleteTaskWithEvent(ctx context.Context, tenantID, tas
 	}
 	defer tx.Rollback(ctx)
 	now := time.Now().UTC()
-	tag, err := tx.Exec(ctx, `UPDATE v6_tasks SET status=$4,updated_at=$5,finished_at=$5,error_code=$5,lease_owner='',lease_until=NULL
+	tag, err := tx.Exec(ctx, `UPDATE v6_tasks SET status=$4,updated_at=$5,finished_at=$5,error_code=$6,lease_owner='',lease_until=NULL
 WHERE tenant_id=$1 AND id=$2 AND status='running' AND lease_owner=$3 AND lease_until>NOW()`, tenantID, taskID, workerID, string(to), now, errorCode)
 	if err != nil {
 		return fmt.Errorf("complete task: %w", err)
