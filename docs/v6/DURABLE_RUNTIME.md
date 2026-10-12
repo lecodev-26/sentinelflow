@@ -1,6 +1,6 @@
 # V6 Durable Runtime — implementation status
 
-**Status:** in progress. The first increment establishes storage-agnostic domain contracts and lifecycle transition rules. It does not yet provide durable persistence, distributed scheduling, worker leases, or crash recovery.
+**Status:** in progress. Domain contracts are now backed by an initial PostgreSQL schema and a transactional/concurrency-aware Run/Task store. The runtime is not yet a complete production scheduler: end-to-end crash recovery, durable event delivery, and concurrency/tenant-isolation integration coverage remain open.
 
 ## Current increment
 
@@ -14,14 +14,17 @@ The Go package `internal/runtime/v6` defines:
 
 The models are deliberately storage-agnostic so persistence and worker implementations can be tested against the same invariants.
 
+The first PostgreSQL slice adds migration `0019_v6_runtime.sql` and `PostgresStore` methods to create/read runs, perform compare-and-set Run/Task transitions, claim eligible tasks with `FOR UPDATE SKIP LOCKED`, renew only a live lease held by the current worker, and recover expired leases into a bounded retry or terminal failure. Tenant IDs scope all reads and state mutations; composite foreign keys prevent cross-tenant Run/Task/Artifact/Event relationships. Payloads remain external references.
+
+This is not yet a complete transactional execution API: artifact/event write methods, atomic state-change plus outbox event commits, worker-loop integration, and real PostgreSQL concurrency tests remain to be implemented.
+
 ## Next implementation slices
 
-1. Define PostgreSQL schema and transactional repository interfaces for runs, tasks, artifacts, idempotency records, and lifecycle events.
-2. Implement compare-and-set state transitions and atomic task claiming/lease renewal.
+1. Complete repository operations for artifacts and immutable lifecycle events, including atomic state-change plus outbox writes.
+2. Integrate the store with a worker loop and define cancellation and stale-worker fencing semantics for external side effects.
 3. Add an outbox/inbox strategy for event delivery and duplicate handling.
-4. Implement bounded retries, lease expiry recovery, cancellation, and stale-worker protection.
-5. Add integration tests for process interruption, concurrent claims, duplicate delivery, and tenant isolation.
-6. Add query APIs and tracing/audit lineage for execution inspection.
+4. Add PostgreSQL integration tests for process interruption, concurrent claims, lease renewal/expiry, retries, duplicate delivery, and tenant isolation.
+5. Add query APIs and tracing/audit lineage for execution inspection.
 
 ## Safety and correctness constraints
 
@@ -35,7 +38,7 @@ The models are deliberately storage-agnostic so persistence and worker implement
 ## Validation for this increment
 
 ```bash
-go test ./internal/runtime/v6 ./internal/runtime/v4 ./internal/agents/v5
+go test ./internal/runtime/v6 ./internal/runtime/v4 ./internal/agents/v5 ./internal/storage/postgres
 git diff --check
 ```
 
