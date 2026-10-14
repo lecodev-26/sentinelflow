@@ -26,7 +26,7 @@ func integrationStore(t *testing.T) (*pgxpool.Pool, *PostgresStore, context.Cont
 	}
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
-		t.Skipf("postgres unavailable: %v", err)
+		t.Fatalf("SENTINELFLOW_DATABASE_URL is set but PostgreSQL is unavailable: %v", err)
 	}
 	t.Cleanup(pool.Close)
 	return pool, NewPostgresStore(pool), ctx

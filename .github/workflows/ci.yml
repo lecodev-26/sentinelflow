@@ -77,3 +77,39 @@ jobs:
 
       - name: Scan Go dependencies and code
         run: govulncheck ./...
+
+  postgres-integration:
+    name: PostgreSQL integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: sentinelflow
+          POSTGRES_PASSWORD: sentinelflow
+          POSTGRES_DB: sentinelflow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sentinelflow -d sentinelflow"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      SENTINELFLOW_DATABASE_URL: postgres://sentinelflow:sentinelflow@localhost:5432/sentinelflow?sslmode=disable
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.2'
+          cache: true
+
+      - name: Apply database migrations
+        run: go run ./cmd/migrator up
+
+      - name: Run V6 runtime integration tests against PostgreSQL
+        run: go test ./internal/runtime/v6 -count=1
