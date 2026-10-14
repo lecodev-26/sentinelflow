@@ -267,6 +267,40 @@ func TestPostgresStore_ConcurrentClaimsAndLeaseRecovery(t *testing.T) {
 	}
 }
 
+
+func TestPostgresStore_ExpiredLeaseAtAttemptLimitFailsTask(t *testing.T) {
+	pool, store, ctx := integrationStore(t)
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	tenant, runID, taskID := "it-exhausted-"+suffix, "it-run-"+suffix, "it-task-"+suffix
+	cleanupRun(t, ctx, pool, tenant, runID)
+	if err := store.CreateRun(ctx, integrationRun(tenant, runID)); err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	task := integrationTask(tenant, runID, taskID)
+	task.MaxAttempts = 1
+	if err := store.CreateTask(ctx, task); err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+	if _, err := store.ClaimTask(ctx, tenant, "worker-exhausted", time.Minute); err != nil {
+		t.Fatalf("claim task: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE v6_tasks SET lease_until=NOW()-INTERVAL '1 second' WHERE tenant_id=$1 AND id=$2`, tenant, taskID); err != nil {
+		t.Fatalf("expire task lease: %v", err)
+	}
+	if n, err := store.RecoverExpiredLeases(ctx); err != nil || n != 1 {
+		t.Fatalf("recover expired lease: recovered=%d err=%v", n, err)
+	}
+
+	var status, owner, errorCode string
+	var leaseUntil, finishedAt *time.Time
+	if err := pool.QueryRow(ctx, `SELECT status,lease_owner,lease_until,error_code,finished_at FROM v6_tasks WHERE tenant_id=$1 AND id=$2`, tenant, taskID).Scan(&status, &owner, &leaseUntil, &errorCode, &finishedAt); err != nil {
+		t.Fatalf("read recovered task: %v", err)
+	}
+	if status != string(TaskFailed) || owner != "" || leaseUntil != nil || errorCode != "lease_expired_attempts_exhausted" || finishedAt == nil {
+		t.Fatalf("unexpected exhausted task state status=%q owner=%q lease=%v error=%q finished=%v", status, owner, leaseUntil, errorCode, finishedAt)
+	}
+}
+
 func TestPostgresStore_ExecutionEventIsPublishedFromOutbox(t *testing.T) {
 	pool, store, ctx := integrationStore(t)
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
