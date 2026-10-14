@@ -267,7 +267,6 @@ func TestPostgresStore_ConcurrentClaimsAndLeaseRecovery(t *testing.T) {
 	}
 }
 
-
 func TestPostgresStore_ExpiredLeaseAtAttemptLimitFailsTask(t *testing.T) {
 	pool, store, ctx := integrationStore(t)
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
