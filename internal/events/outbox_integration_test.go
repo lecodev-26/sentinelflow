@@ -35,7 +35,7 @@ func TestOutbox_EndToEnd(t *testing.T) {
 	}
 	defer pool.Close()
 	if err := pool.Ping(ctx); err != nil {
-		t.Skipf("postgres unavailable: %v", err)
+		t.Fatalf("SENTINELFLOW_DATABASE_URL is set but PostgreSQL is unavailable: %v", err)
 	}
 
 	// --- Redis + Bus ---
@@ -46,7 +46,7 @@ func TestOutbox_EndToEnd(t *testing.T) {
 	rdb := redis.NewClient(ropt)
 	defer rdb.Close()
 	if err := rdb.Ping(ctx).Err(); err != nil {
-		t.Skipf("redis unavailable: %v", err)
+		t.Fatalf("SENTINELFLOW_REDIS_URL is set but Redis is unavailable: %v", err)
 	}
 
 	bus := NewRedisBus(rdb)
@@ -136,7 +136,7 @@ func TestOutbox_TxRollbackNoEvent(t *testing.T) {
 	}
 	defer pool.Close()
 	if err := pool.Ping(ctx); err != nil {
-		t.Skipf("postgres unavailable: %v", err)
+		t.Fatalf("SENTINELFLOW_DATABASE_URL is set but PostgreSQL is unavailable: %v", err)
 	}
 
 	ev := NewEvent("usage.recorded").WithTenant("tenant-rollback")
