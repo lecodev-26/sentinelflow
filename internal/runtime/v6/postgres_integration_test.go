@@ -319,3 +319,62 @@ func TestPostgresStore_ExecutionEventIsPublishedFromOutbox(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+func TestPostgresStore_ExpiredWorkerCannotCompleteReclaimedTask(t *testing.T) {
+	pool, store, ctx := integrationStore(t)
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	tenant, runID, taskID := "it-fence-"+suffix, "it-run-"+suffix, "it-task-"+suffix
+	staleEventID, currentEventID := "it-event-stale-"+suffix, "it-event-current-"+suffix
+	cleanupRun(t, ctx, pool, tenant, runID)
+	t.Cleanup(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		for _, eventID := range []string{staleEventID, currentEventID} {
+			if _, err := pool.Exec(cleanupCtx, `DELETE FROM outbox_events WHERE event_id=$1`, eventID); err != nil {
+				t.Errorf("cleanup outbox event %s: %v", eventID, err)
+			}
+		}
+	})
+	if err := store.CreateRun(ctx, integrationRun(tenant, runID)); err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	if err := store.CreateTask(ctx, integrationTask(tenant, runID, taskID)); err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+	if _, err := store.ClaimTask(ctx, tenant, "worker-stale", time.Minute); err != nil {
+		t.Fatalf("claim task with first worker: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE v6_tasks SET lease_until=NOW()-INTERVAL '1 second' WHERE tenant_id=$1 AND id=$2`, tenant, taskID); err != nil {
+		t.Fatalf("expire first lease: %v", err)
+	}
+	if n, err := store.RecoverExpiredLeases(ctx); err != nil || n != 1 {
+		t.Fatalf("recover expired lease: recovered=%d err=%v", n, err)
+	}
+	if _, err := store.ClaimTask(ctx, tenant, "worker-current", time.Minute); err != nil {
+		t.Fatalf("claim task with replacement worker: %v", err)
+	}
+
+	staleEvent := ExecutionEvent{ID: staleEventID, SchemaVersion: 1, TenantID: tenant, RunID: runID, TaskID: taskID, CorrelationID: "corr-" + runID, Type: "task.completed"}
+	if err := store.CompleteTaskWithEvent(ctx, tenant, taskID, "worker-stale", TaskSucceeded, "", staleEvent); err != ErrConflict {
+		t.Fatalf("stale worker completion = %v, want ErrConflict", err)
+	}
+	var staleCount int
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM v6_execution_events WHERE id=$1`, staleEventID).Scan(&staleCount); err != nil {
+		t.Fatalf("check stale lineage: %v", err)
+	}
+	if staleCount != 0 {
+		t.Fatalf("stale worker wrote %d lineage events, want 0", staleCount)
+	}
+
+	currentEvent := ExecutionEvent{ID: currentEventID, SchemaVersion: 1, TenantID: tenant, RunID: runID, TaskID: taskID, CorrelationID: "corr-" + runID, Type: "task.completed"}
+	if err := store.CompleteTaskWithEvent(ctx, tenant, taskID, "worker-current", TaskSucceeded, "", currentEvent); err != nil {
+		t.Fatalf("current worker completion: %v", err)
+	}
+	var status string
+	if err := pool.QueryRow(ctx, `SELECT status FROM v6_tasks WHERE tenant_id=$1 AND id=$2`, tenant, taskID).Scan(&status); err != nil {
+		t.Fatalf("read final task status: %v", err)
+	}
+	if status != string(TaskSucceeded) {
+		t.Fatalf("final task status = %q, want %q", status, TaskSucceeded)
+	}
+}
