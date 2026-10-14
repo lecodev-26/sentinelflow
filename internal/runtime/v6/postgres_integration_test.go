@@ -89,6 +89,39 @@ func TestPostgresStore_RunTenantScopeAndTransitions(t *testing.T) {
 	}
 }
 
+func TestPostgresStore_RunIdempotencyIsTenantScoped(t *testing.T) {
+	pool, store, ctx := integrationStore(t)
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	tenantA, tenantB := "it-idem-a-"+suffix, "it-idem-b-"+suffix
+	key := "request-" + suffix
+	runA := integrationRun(tenantA, "it-run-a-"+suffix)
+	runA.IdempotencyKey = key
+	runB := integrationRun(tenantB, "it-run-b-"+suffix)
+	runB.IdempotencyKey = key
+	cleanupRun(t, ctx, pool, tenantA, runA.ID)
+	cleanupRun(t, ctx, pool, tenantB, runB.ID)
+
+	if err := store.CreateRun(ctx, runA); err != nil {
+		t.Fatalf("create first idempotent run: %v", err)
+	}
+	duplicate := integrationRun(tenantA, "it-run-duplicate-"+suffix)
+	duplicate.IdempotencyKey = key
+	if err := store.CreateRun(ctx, duplicate); err == nil {
+		t.Fatal("create run with duplicate tenant idempotency key succeeded; want conflict")
+	}
+	if err := store.CreateRun(ctx, runB); err != nil {
+		t.Fatalf("same idempotency key in another tenant should be allowed: %v", err)
+	}
+
+	var count int
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM v6_runs WHERE tenant_id=$1 AND idempotency_key=$2`, tenantA, key).Scan(&count); err != nil {
+		t.Fatalf("count idempotent runs: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("tenant A has %d runs for one idempotency key, want 1", count)
+	}
+}
+
 func TestPostgresStore_RetryEventAndOutboxAreAtomic(t *testing.T) {
 	pool, store, ctx := integrationStore(t)
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
