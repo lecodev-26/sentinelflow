@@ -96,8 +96,18 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 12
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     env:
       SENTINELFLOW_DATABASE_URL: postgres://sentinelflow:sentinelflow@localhost:5432/sentinelflow?sslmode=disable
+      SENTINELFLOW_REDIS_URL: redis://localhost:6379/0
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -111,5 +121,5 @@ jobs:
       - name: Apply database migrations
         run: go run ./cmd/migrator up
 
-      - name: Run V6 runtime integration tests against PostgreSQL
-        run: go test ./internal/runtime/v6 -count=1
+      - name: Run PostgreSQL runtime, outbox and audit integration tests
+        run: go test ./internal/runtime/v6 ./internal/events ./internal/audit -count=1
