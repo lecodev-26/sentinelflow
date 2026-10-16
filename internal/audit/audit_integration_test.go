@@ -34,7 +34,7 @@ func TestAudit_EndToEnd(t *testing.T) {
 	}
 	defer pool.Close()
 	if err := pool.Ping(ctx); err != nil {
-		t.Skipf("postgres unavailable: %v", err)
+		t.Fatalf("SENTINELFLOW_DATABASE_URL is set but PostgreSQL is unavailable: %v", err)
 	}
 
 	ropt, err := redis.ParseURL(redisURL)
@@ -44,7 +44,7 @@ func TestAudit_EndToEnd(t *testing.T) {
 	rdb := redis.NewClient(ropt)
 	defer rdb.Close()
 	if err := rdb.Ping(ctx).Err(); err != nil {
-		t.Skipf("redis unavailable: %v", err)
+		t.Fatalf("SENTINELFLOW_REDIS_URL is set but Redis is unavailable: %v", err)
 	}
 
 	bus := events.NewRedisBus(rdb)

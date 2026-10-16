@@ -15,8 +15,19 @@
 [![CI](https://github.com/lecodev-26/sentinelflow/actions/workflows/ci.yml/badge.svg)](https://github.com/lecodev-26/sentinelflow/actions/workflows/ci.yml)
 [![Open Issues](https://img.shields.io/github/issues/lecodev-26/sentinelflow)](https://github.com/lecodev-26/sentinelflow/issues)
 [![Stars](https://img.shields.io/github/stars/lecodev-26/sentinelflow)](https://github.com/lecodev-26/sentinelflow/stargazers)
+[![Contribute](https://img.shields.io/badge/Contribute-welcome-2ea44f?logo=github)](CONTRIBUTING.md)
 
 </div>
+
+> **Contributions are welcome!** Help shape SentinelFlow: report a bug, propose an improvement, improve documentation, add tests, or implement an issue. Start with the [Contributing Guide](CONTRIBUTING.md), choose an issue labelled for V6 or good first issue, and open a pull request against the appropriate development branch.
+>
+> <div align="center">
+>
+> [![Contribute to SentinelFlow](https://img.shields.io/badge/🤝_Contribute-Read_the_guide-2ea44f?style=for-the-badge)](CONTRIBUTING.md)
+> [![Good first issues](https://img.shields.io/github/issues/lecodev-26/sentinelflow/good%20first%20issue?label=Good%20first%20issues)](https://github.com/lecodev-26/sentinelflow/labels/good%20first%20issue)
+> [![Open issues](https://img.shields.io/github/issues/lecodev-26/sentinelflow?label=Open%20issues)](https://github.com/lecodev-26/sentinelflow/issues)
+>
+> </div>
 
 SentinelFlow is an **OpenAI-compatible AI gateway / LLM gateway** for teams running multiple model providers. It combines model routing, provider failover, policy enforcement, AI FinOps, security and observability in one open-source control layer.
 
@@ -199,7 +210,11 @@ go build ./cmd/gateway ./cmd/controlplane ./cmd/worker ./cmd/cli ./cmd/migrator
 git diff --check
 ```
 
-Pull requests should include tests for behavioral changes and documentation for public API/configuration changes.
+Pull requests should include tests for behavioral changes and documentation for public API/configuration changes. See the [Contributing Guide](CONTRIBUTING.md) for the full workflow, branch targets, validation commands and review checklist.
+
+## Contributing
+
+Contributions are welcome from first-time and experienced contributors. Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup, issue selection, branch conventions, testing, and the pull-request process. Browse [open issues](https://github.com/lecodev-26/sentinelflow/issues) to find a task, or start a discussion in an issue before large changes.
 
 ## Security
 

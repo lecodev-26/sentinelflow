@@ -1,5 +1,7 @@
 # SentinelFlow Go SDK
 
+> **Contributions welcome!** See the [contribution guide](../CONTRIBUTING.md) for the workflow and pull-request requirements.
+
 Small dependency-free client for the SentinelFlow HTTP gateway. The Go SDK is versioned independently from the SentinelFlow server.
 
 ## Install

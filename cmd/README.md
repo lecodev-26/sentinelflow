@@ -1,5 +1,7 @@
 # SentinelFlow V5 commands
 
+> **Contributions welcome!** See the [contribution guide](../CONTRIBUTING.md) for the workflow and pull-request requirements.
+
 - `gateway`: data-plane API gateway
 - `controlplane`: identity, tenancy, policy and administration
 - `worker`: event/outbox consumers
