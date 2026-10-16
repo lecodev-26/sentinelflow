@@ -434,6 +434,17 @@ func TestPostgresStore_ExpiredWorkerCannotCompleteReclaimedTask(t *testing.T) {
 	if staleRetryCount != 0 {
 		t.Fatalf("stale worker wrote %d retry lineage events, want 0", staleRetryCount)
 	}
+	if err := store.RetryTask(ctx, tenant, taskID, "worker-stale", time.Second, "stale_retry"); err != ErrConflict {
+		t.Fatalf("stale worker retry without event = %v, want ErrConflict", err)
+	}
+	var ownerAfterStaleRetry string
+	var statusAfterStaleRetry string
+	if err := pool.QueryRow(ctx, `SELECT status,lease_owner FROM v6_tasks WHERE tenant_id=$1 AND id=$2`, tenant, taskID).Scan(&statusAfterStaleRetry, &ownerAfterStaleRetry); err != nil {
+		t.Fatalf("read task after stale retry: %v", err)
+	}
+	if statusAfterStaleRetry != string(TaskRunning) || ownerAfterStaleRetry != "worker-current" {
+		t.Fatalf("stale retry changed current task state: status=%q owner=%q", statusAfterStaleRetry, ownerAfterStaleRetry)
+	}
 
 	staleEvent := ExecutionEvent{ID: staleEventID, SchemaVersion: 1, TenantID: tenant, RunID: runID, TaskID: taskID, CorrelationID: "corr-" + runID, Type: "task.completed"}
 	if err := store.CompleteTaskWithEvent(ctx, tenant, taskID, "worker-stale", TaskSucceeded, "", staleEvent); err != ErrConflict {
