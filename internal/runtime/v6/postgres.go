@@ -125,7 +125,8 @@ func (s *PostgresStore) TransitionTask(ctx context.Context, tenantID, id string,
 finished_at=COALESCE($6,finished_at), error_code=$7,
 lease_owner=CASE WHEN $4='running' THEN lease_owner ELSE '' END,
 lease_until=CASE WHEN $4='running' THEN lease_until ELSE NULL END
-WHERE tenant_id=$1 AND id=$2 AND status=$3`, tenantID, id, string(from), string(to), now, finished, errorCode)
+WHERE tenant_id=$1 AND id=$2 AND status=$3
+AND NOT (status='running' AND lease_owner <> '')`, tenantID, id, string(from), string(to), now, finished, errorCode)
 	if err != nil {
 		return fmt.Errorf("transition task: %w", err)
 	}
