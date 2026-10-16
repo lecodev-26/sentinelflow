@@ -265,6 +265,9 @@ func TestPostgresStore_ConcurrentClaimsAndLeaseRecovery(t *testing.T) {
 	if status != string(TaskRetrying) || owner != "" || leaseUntil != nil {
 		t.Fatalf("recovered lease state status=%q owner=%q until=%v", status, owner, leaseUntil)
 	}
+	if n, err := store.RecoverExpiredLeases(ctx); err != nil || n != 0 {
+		t.Fatalf("second recovery should be idempotent: recovered=%d err=%v", n, err)
+	}
 }
 
 func TestPostgresStore_ExpiredLeaseAtAttemptLimitFailsTask(t *testing.T) {
