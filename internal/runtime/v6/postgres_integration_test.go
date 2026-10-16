@@ -286,6 +286,19 @@ func TestPostgresStore_ExpiredLeaseAtAttemptLimitFailsTask(t *testing.T) {
 	if _, err := pool.Exec(ctx, `UPDATE v6_tasks SET lease_until=NOW()-INTERVAL '1 second' WHERE tenant_id=$1 AND id=$2`, tenant, taskID); err != nil {
 		t.Fatalf("expire task lease: %v", err)
 	}
+	if err := store.RenewLease(ctx, tenant, taskID, "worker-exhausted", time.Minute); err != ErrConflict {
+		t.Fatalf("expired worker lease renewal = %v, want ErrConflict", err)
+	}
+	if err := store.RetryTask(ctx, tenant, taskID, "worker-exhausted", time.Second, "expired_retry"); err != ErrConflict {
+		t.Fatalf("expired worker retry = %v, want ErrConflict", err)
+	}
+	var preRecoveryStatus, preRecoveryOwner string
+	if err := pool.QueryRow(ctx, `SELECT status,lease_owner FROM v6_tasks WHERE tenant_id=$1 AND id=$2`, tenant, taskID).Scan(&preRecoveryStatus, &preRecoveryOwner); err != nil {
+		t.Fatalf("read task before lease recovery: %v", err)
+	}
+	if preRecoveryStatus != string(TaskRunning) || preRecoveryOwner != "worker-exhausted" {
+		t.Fatalf("expired worker mutated task before recovery: status=%q owner=%q", preRecoveryStatus, preRecoveryOwner)
+	}
 	if n, err := store.RecoverExpiredLeases(ctx); err != nil || n != 1 {
 		t.Fatalf("recover expired lease: recovered=%d err=%v", n, err)
 	}
