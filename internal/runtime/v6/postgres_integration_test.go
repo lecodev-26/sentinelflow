@@ -453,6 +453,9 @@ func TestPostgresStore_ExpiredWorkerCannotCompleteReclaimedTask(t *testing.T) {
 	if err := store.RetryTask(ctx, tenant, taskID, "worker-stale", time.Second, "stale_retry"); err != ErrConflict {
 		t.Fatalf("stale worker retry without event = %v, want ErrConflict", err)
 	}
+	if err := store.TransitionTask(ctx, tenant, taskID, TaskRunning, TaskFailed, "stale_transition"); err != ErrConflict {
+		t.Fatalf("unfenced task transition = %v, want ErrConflict", err)
+	}
 	var ownerAfterStaleRetry string
 	var statusAfterStaleRetry string
 	if err := pool.QueryRow(ctx, `SELECT status,lease_owner FROM v6_tasks WHERE tenant_id=$1 AND id=$2`, tenant, taskID).Scan(&statusAfterStaleRetry, &ownerAfterStaleRetry); err != nil {
