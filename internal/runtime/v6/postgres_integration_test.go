@@ -390,12 +390,12 @@ func TestPostgresStore_ExpiredWorkerCannotCompleteReclaimedTask(t *testing.T) {
 	pool, store, ctx := integrationStore(t)
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
 	tenant, runID, taskID := "it-fence-"+suffix, "it-run-"+suffix, "it-task-"+suffix
-	staleEventID, currentEventID := "it-event-stale-"+suffix, "it-event-current-"+suffix
+	staleEventID, staleRetryEventID, currentEventID := "it-event-stale-"+suffix, "it-event-stale-retry-"+suffix, "it-event-current-"+suffix
 	cleanupRun(t, ctx, pool, tenant, runID)
 	t.Cleanup(func() {
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		for _, eventID := range []string{staleEventID, currentEventID} {
+		for _, eventID := range []string{staleEventID, staleRetryEventID, currentEventID} {
 			if _, err := pool.Exec(cleanupCtx, `DELETE FROM outbox_events WHERE event_id=$1`, eventID); err != nil {
 				t.Errorf("cleanup outbox event %s: %v", eventID, err)
 			}
@@ -418,6 +418,21 @@ func TestPostgresStore_ExpiredWorkerCannotCompleteReclaimedTask(t *testing.T) {
 	}
 	if _, err := store.ClaimTask(ctx, tenant, "worker-current", time.Minute); err != nil {
 		t.Fatalf("claim task with replacement worker: %v", err)
+	}
+
+	if err := store.RenewLease(ctx, tenant, taskID, "worker-stale", time.Minute); err != ErrConflict {
+		t.Fatalf("stale worker lease renewal = %v, want ErrConflict", err)
+	}
+	staleRetryEvent := ExecutionEvent{ID: staleRetryEventID, SchemaVersion: 1, TenantID: tenant, RunID: runID, TaskID: taskID, CorrelationID: "corr-" + runID, Type: "task.retrying"}
+	if err := store.RetryTaskWithEvent(ctx, tenant, taskID, "worker-stale", time.Second, "stale_retry", staleRetryEvent); err != ErrConflict {
+		t.Fatalf("stale worker retry = %v, want ErrConflict", err)
+	}
+	var staleRetryCount int
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM v6_execution_events WHERE id=$1`, staleRetryEventID).Scan(&staleRetryCount); err != nil {
+		t.Fatalf("check stale retry lineage: %v", err)
+	}
+	if staleRetryCount != 0 {
+		t.Fatalf("stale worker wrote %d retry lineage events, want 0", staleRetryCount)
 	}
 
 	staleEvent := ExecutionEvent{ID: staleEventID, SchemaVersion: 1, TenantID: tenant, RunID: runID, TaskID: taskID, CorrelationID: "corr-" + runID, Type: "task.completed"}
