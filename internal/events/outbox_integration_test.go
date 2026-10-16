@@ -57,13 +57,14 @@ func TestOutbox_EndToEnd(t *testing.T) {
 
 	// --- Consumer ---
 	received := make(chan Event, 1)
-	bus.Subscribe("usage.recorded", NewConsumer("test-consumer", func(_ context.Context, ev Event) {
+	if err := bus.Subscribe("usage.recorded", NewConsumer("test-consumer", func(_ context.Context, ev Event) {
 		select {
 		case received <- ev:
 		default:
 		}
-	}))
-	time.Sleep(200 * time.Millisecond) // dar tiempo a la suscripción
+	})); err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
 
 	// --- Enqueue dentro de una TX ---
 	ev := NewEvent("usage.recorded").

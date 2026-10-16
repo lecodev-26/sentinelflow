@@ -88,8 +88,27 @@ func (b *RedisBus) Subscribe(eventType string, consumer Consumer) error {
 	b.subscribers[eventType] = append(b.subscribers[eventType], consumer)
 	b.mu.Unlock()
 
+	ready := make(chan error, 1)
 	b.wg.Add(1)
-	go b.listen(eventType, consumer)
+	go b.listen(eventType, consumer, ready)
+	if err := <-ready; err != nil {
+		b.wg.Wait()
+		b.mu.Lock()
+		consumers := b.subscribers[eventType]
+		for i := len(consumers) - 1; i >= 0; i-- {
+			if consumers[i].Name == consumer.Name {
+				consumers = append(consumers[:i], consumers[i+1:]...)
+				break
+			}
+		}
+		if len(consumers) == 0 {
+			delete(b.subscribers, eventType)
+		} else {
+			b.subscribers[eventType] = consumers
+		}
+		b.mu.Unlock()
+		return err
+	}
 
 	logrus.Infof("📡 [Redis] Consumer '%s' subscribed to '%s'", consumer.Name, eventType)
 	return nil
@@ -103,13 +122,18 @@ func (b *RedisBus) Unsubscribe(eventType string) {
 }
 
 // listen mantiene una suscripción al canal eventType y reenvía al consumer.
-func (b *RedisBus) listen(eventType string, consumer Consumer) {
+func (b *RedisBus) listen(eventType string, consumer Consumer, ready chan<- error) {
 	defer b.wg.Done()
 
 	pubsub := b.client.Subscribe(b.ctx, eventType)
 	defer pubsub.Close()
+	if _, err := pubsub.Receive(b.ctx); err != nil {
+		ready <- err
+		return
+	}
 
 	ch := pubsub.Channel()
+	ready <- nil
 	logrus.Infof("📡 [Redis] listening on '%s' for '%s'", eventType, consumer.Name)
 
 	for {

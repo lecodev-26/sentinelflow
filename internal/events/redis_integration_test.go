@@ -42,12 +42,11 @@ func TestRedisBus_PublishSubscribe(t *testing.T) {
 	defer bus.Stop()
 
 	received := make(chan Event, 1)
-	bus.Subscribe("test.event", NewConsumer("test", func(_ context.Context, ev Event) {
+	if err := bus.Subscribe("test.event", NewConsumer("test", func(_ context.Context, ev Event) {
 		received <- ev
-	}))
-
-	// dar tiempo a que la suscripción esté activa
-	time.Sleep(200 * time.Millisecond)
+	})); err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
 
 	ev := NewEvent("test.event").
 		WithTenant("tenant-1").
